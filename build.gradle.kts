@@ -11,6 +11,10 @@ repositories {
 }
 
 dependencies {
+    compile("org.apache.kafka:kafka-clients:1.1.0")
+    compile("com.google.guava:guava:25.1-jre")
+    compile("org.eclipse.collections:eclipse-collections-api:9.2.0")
+    compile("org.eclipse.collections:eclipse-collections:9.2.0")
     testCompile("junit", "junit", "4.12")
 }
 
@@ -26,7 +30,7 @@ dockerCompose {
     require(!dockerHostIp.isNullOrBlank()) {"Please set environment variable DOCKER_HOST_IP; got $dockerHostIp"}
     println("Using $dockerHostIp as KAFKA_ADVERTISED_HOST_NAME")
     scale = mapOf("kakfa" to 3)
-    captureContainersOutput = true
+    captureContainersOutput = false
     dockerComposeWorkingDirectory = "./testbed"
     environment["KAFKA_ADVERTISED_HOST_NAME"] = dockerHostIp
 }
