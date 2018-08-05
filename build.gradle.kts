@@ -11,7 +11,7 @@ repositories {
 }
 
 dependencies {
-    compile("org.apache.kafka:kafka-clients:1.1.0")
+    compile("org.apache.kafka:kafka-clients:2.0.0")
     compile("com.google.guava:guava:25.1-jre")
     compile("org.eclipse.collections:eclipse-collections-api:9.2.0")
     compile("org.eclipse.collections:eclipse-collections:9.2.0")
