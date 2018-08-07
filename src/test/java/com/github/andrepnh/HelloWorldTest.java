@@ -1,6 +1,7 @@
 package com.github.andrepnh;
 
 import com.github.andrepnh.kafka.playground.KafkaProperties;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Table.Cell;
@@ -8,20 +9,20 @@ import com.google.common.collect.Tables;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.eclipse.collections.api.list.ImmutableList;
-import org.eclipse.collections.impl.list.primitive.IntInterval;
+import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.junit.Test;
 
 import java.util.concurrent.ExecutionException;
@@ -92,62 +93,80 @@ public class HelloWorldTest {
         .put(ConsumerConfig.GROUP_ID_CONFIG, topic + "_group")
         .put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
         .build();
-    var recordsByThreadAndPartition =
-        new ConcurrentHashMap<String, ImmutableList<AtomicInteger>>(partitions);
-    executorService.invokeAll(Collections.nCopies(partitions,
-        () -> {
-          recordsByThreadAndPartition.put(
-              Thread.currentThread().getName(),
-              IntInterval.zeroTo(partitions).collect(i -> new AtomicInteger()));
-          try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
-            consumer.subscribe(Lists.newArrayList(topic));
-            while (recordsLeft.get() > 0 && !Thread.interrupted()) {
-              for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(50))) {
-                recordsLeft.decrementAndGet();
-                recordsByThreadAndPartition
-                    .get(Thread.currentThread().getName())
-                    .get(record.partition())
-                    .incrementAndGet();
-              }
-              consumer.commitSync();
-            }
-          }
-          return null;
-        }));
+    List<Future<ConsumerRecordsCounter>> futures = executorService.invokeAll(
+        Collections.nCopies(
+            partitions,
+            () -> consume(topic, consumerProps, recordsLeft, partitions)));
     executorService.shutdown();
     boolean finished = executorService.awaitTermination(5, TimeUnit.SECONDS);
     executorService.shutdownNow();
     assertTrue("Timeout elapsed before all messages were consumed", finished);
-    printRecordsConsumedByThreadAndPartition(recordsByThreadAndPartition);
+    printRecordsConsumedByThreadAndPartition(futures);
   }
 
-  private void printRecordsConsumedByThreadAndPartition(
-      ConcurrentHashMap<String, ImmutableList<AtomicInteger>> recordsByThreadAndPartition) {
-    recordsByThreadAndPartition
-        .entrySet()
-        .stream()
-        .flatMap(this::listValuedEntryToIndexedTableCell)
-        .filter(cell -> cell.getValue().get() > 0)
-        .sorted(byCellRowAndThenByColumn())
+  private ConsumerRecordsCounter consume(String topic, ImmutableMap<String, Object> consumerProps,
+      AtomicInteger recordsLeft, int partitions) {
+    var recordCounter = new ConsumerRecordsCounter(Thread.currentThread().getName(), partitions);
+    try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
+      consumer.subscribe(Lists.newArrayList(topic));
+      while (recordsLeft.get() > 0 && !Thread.interrupted()) {
+        for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(50))) {
+          recordsLeft.decrementAndGet();
+          recordCounter.recordConsumed(record.partition());
+        }
+        consumer.commitSync();
+      }
+    }
+    return recordCounter;
+  }
+
+  private void printRecordsConsumedByThreadAndPartition(List<Future<ConsumerRecordsCounter>> futures) {
+    org.eclipse.collections.impl.factory.Lists.immutable
+        .ofAll(futures)
+        .collect(future -> {
+          try {
+            return future.get();
+          } catch (InterruptedException | ExecutionException e) {
+            throw new IllegalStateException(e);
+          }
+        }).flatCollect(counter -> counter
+            .getCounterByPartition()
+            .collectWithIndex((count, partition) ->
+                Tables.immutableCell(counter.getConsumer(), partition, count)))
+        .select(cell -> cell.getValue() > 0)
+        .toSortedList(byCellRowAndThenByColumn())
         .forEach(cell ->
             System.out.printf(
                 "Thread %s, partition %d: %d records consumed\n",
-                cell.getRowKey(), cell.getColumnKey(), cell.getValue().get()));
+                cell.getRowKey(), cell.getColumnKey(), cell.getValue()));
   }
 
-  private <K, V> Stream<Cell<K, Integer, V>> listValuedEntryToIndexedTableCell(
-      Entry<K, ? extends ImmutableList<V>> entry) {
-    return IntInterval.zeroTo(entry.getValue().size())
-        .zip(entry.getValue())
-        .collect(
-            partitionObjectPair ->
-                Tables.immutableCell(
-                    entry.getKey(), partitionObjectPair.getOne(), partitionObjectPair.getTwo()))
-        .stream();
-  }
-
-  private Comparator<Cell<String, Integer, AtomicInteger>> byCellRowAndThenByColumn() {
-    return Comparator.<Cell<String, Integer, AtomicInteger>, String>comparing(Cell::getRowKey)
+  private Comparator<Cell<String, Integer, ?>> byCellRowAndThenByColumn() {
+    return Comparator.<Cell<String, Integer, ?>, String>comparing(Cell::getRowKey)
         .thenComparing(Cell::getColumnKey);
+  }
+
+  private static class ConsumerRecordsCounter {
+    private final String consumer;
+
+    private final MutableIntList counterByPartition;
+
+    public ConsumerRecordsCounter(String consumer, int partitions) {
+      this.consumer = consumer;
+      this.counterByPartition = IntLists.mutable.of(new int[partitions]);
+    }
+
+    public ConsumerRecordsCounter recordConsumed(int partition) {
+      counterByPartition.set(partition, counterByPartition.get(partition) + 1);
+      return this;
+    }
+
+    public String getConsumer() {
+      return consumer;
+    }
+
+    public IntList getCounterByPartition() {
+      return counterByPartition;
+    }
   }
 }
