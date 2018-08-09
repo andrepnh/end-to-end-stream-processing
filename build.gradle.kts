@@ -16,6 +16,9 @@ dependencies {
     compile("org.eclipse.collections:eclipse-collections-api:9.2.0")
     compile("org.eclipse.collections:eclipse-collections:9.2.0")
     testCompile("junit", "junit", "4.12")
+    testCompile("io.cucumber:cucumber-picocontainer:3.0.2")
+    testCompile("io.cucumber:cucumber-java8:3.0.2")
+    testCompile("io.cucumber:cucumber-junit:3.0.2")
 }
 
 configure<JavaPluginConvention> {

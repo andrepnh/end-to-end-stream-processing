@@ -97,7 +97,7 @@ public class HelloWorldTest {
             partitions,
             () -> consume(topic, consumerProps, recordsLeft, partitions)));
     executorService.shutdown();
-    boolean finished = executorService.awaitTermination(10, TimeUnit.SECONDS);
+    boolean finished = executorService.awaitTermination(5, TimeUnit.SECONDS);
     executorService.shutdownNow();
     assertTrue("Timeout elapsed before all messages were consumed", finished);
     printRecordsConsumedCount(futures);
@@ -126,7 +126,7 @@ public class HelloWorldTest {
         .collect(props -> () -> consume(topic, props, recordsLeft, partitions));
     List<Future<ImmutableList<ConsumerResults>>> futures = executorService.invokeAll(consumers.toList());
     executorService.shutdown();
-    boolean finished = executorService.awaitTermination(5, TimeUnit.SECONDS);
+    boolean finished = executorService.awaitTermination(15, TimeUnit.SECONDS);
     executorService.shutdownNow();
     assertTrue("Timeout elapsed before all messages were consumed", finished);
     printRecordsConsumedCount(futures);
@@ -249,4 +249,5 @@ public class HelloWorldTest {
       return records;
     }
   }
+
 }
