@@ -50,9 +50,9 @@ public final class KafkaProperties {
         .put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
   }
 
-  public static CreateTopicsResult createTopic(String name, int partitions, short replicationFactor) {
+  public static CreateTopicsResult createTopic(String name, int partitions, int replicationFactor) {
     return ADMIN_CLIENT.createTopics(Lists.newArrayList(
-        new NewTopic(name, partitions, replicationFactor)));
+        new NewTopic(name, partitions, (short) replicationFactor)));
   }
 
   public static String uniqueTopic(String prefix) {
