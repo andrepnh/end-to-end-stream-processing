@@ -16,7 +16,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.IntFunction;
-import java.util.stream.Collectors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -65,7 +64,7 @@ public class FluentParallelConsumer {
   public ImmutableList<ConsumerResults> consumeUntilNoRecordsFound(
       TopicProperties topic, int noRecordsLimit, Duration timeout) {
     ImmutableList<Callable<ImmutableList<ConsumerResults>>> consumers = IntInterval
-        .zeroTo(consumerQty)
+        .zeroTo(consumerQty - 1)
         .collect(consumerNumber -> {
           var propertiesBuilder = ClusterProperties.newDefaultConsumerProperties();
           propertiesExtensionChain.accept(consumerNumber, propertiesBuilder);
@@ -111,7 +110,7 @@ public class FluentParallelConsumer {
       TopicProperties topic, ImmutableMap<String, Object> consumerProps, int noRecordsLimit) {
     int noRecordsFoundCount = 0;
     var consumerGroup = consumerProps.get(ConsumerConfig.GROUP_ID_CONFIG).toString();
-    var results = IntInterval.zeroTo(topic.getPartitions())
+    var results = IntInterval.zeroTo(topic.getPartitions() - 1)
         .collect(partition -> new ConsumerResults(
             topic.getName(), consumerGroup, Thread.currentThread().getName(), partition));
     try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {

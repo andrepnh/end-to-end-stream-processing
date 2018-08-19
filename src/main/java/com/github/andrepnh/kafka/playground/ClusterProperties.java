@@ -1,16 +1,11 @@
 package com.github.andrepnh.kafka.playground;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
-import java.util.UUID;
-import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.eclipse.collections.api.list.primitive.ImmutableIntList;
 
 public final class ClusterProperties {

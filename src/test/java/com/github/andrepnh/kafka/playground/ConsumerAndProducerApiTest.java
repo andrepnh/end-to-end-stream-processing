@@ -66,7 +66,7 @@ public class ConsumerAndProducerApiTest {
   }
 
   @Test
-  public void multipleConsumersInASingleGroup() throws InterruptedException {
+  public void multipleConsumersInASingleGroup() {
     final var topic = TopicCreator.create(
         "multiple-consumers-single-group", ClusterProperties.BROKERS);
     final int records = 1000;
@@ -83,7 +83,7 @@ public class ConsumerAndProducerApiTest {
   }
 
   @Test
-  public void singleConsumerPerGroupAndMultipleGroups() throws InterruptedException {
+  public void singleConsumerPerGroupAndMultipleGroups() {
     final var topic = TopicCreator.create(
         "single-consumer-in-multiple-groups", ClusterProperties.BROKERS);
     final int records = 1000, consumerGroups = topic.getPartitions();
