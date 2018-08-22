@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.IntFunction;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -74,6 +75,20 @@ public class FluentParallelConsumer {
     return resultsByConsumer.flatCollect(Functions.identity());
   }
 
+  public ImmutableList<ConsumerResults> consumeRecords(
+      TopicProperties topic, int recordsToConsume, Duration timeout) {
+    var recordsLeft = new AtomicInteger(recordsToConsume);
+    ImmutableList<Callable<ImmutableList<ConsumerResults>>> consumers = IntInterval
+        .zeroTo(consumerQty - 1)
+        .collect(consumerNumber -> {
+          var propertiesBuilder = ClusterProperties.newDefaultConsumerProperties();
+          propertiesExtensionChain.accept(consumerNumber, propertiesBuilder);
+          return propertiesBuilder.build();
+        }).collect(props -> () -> consumeRecords(topic, props, recordsLeft));
+    ImmutableList<ImmutableList<ConsumerResults>> resultsByConsumer = execute(consumers, timeout);
+    return resultsByConsumer.flatCollect(Functions.identity());
+  }
+
   private ImmutableList<ImmutableList<ConsumerResults>> execute(
       ImmutableList<Callable<ImmutableList<ConsumerResults>>> consumers,
       Duration timeout) {
@@ -118,9 +133,32 @@ public class FluentParallelConsumer {
       while (noRecordsFoundCount < noRecordsLimit && !Thread.interrupted()) {
         var recordsFound = consumer.poll(Duration.ofMillis(50));
         for (ConsumerRecord<String, String> record : recordsFound) {
+          noRecordsFoundCount = 0;
           results.get(record.partition()).inc();
         }
         noRecordsFoundCount += recordsFound.isEmpty() ? 1 : 0;
+        consumer.commitSync();
+      }
+    }
+    return results;
+  }
+
+  private ImmutableList<ConsumerResults> consumeRecords(
+      TopicProperties topic,
+      ImmutableMap<String, Object> consumerProps,
+      AtomicInteger recordsLeft) {
+    var consumerGroup = consumerProps.get(ConsumerConfig.GROUP_ID_CONFIG).toString();
+    var results = IntInterval.zeroTo(topic.getPartitions() - 1)
+        .collect(partition -> new ConsumerResults(
+            topic.getName(), consumerGroup, Thread.currentThread().getName(), partition));
+    try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
+      consumer.subscribe(Lists.newArrayList(topic.getName()));
+      while (recordsLeft.get() > 0 && !Thread.interrupted()) {
+        var recordsFound = consumer.poll(Duration.ofMillis(50));
+        for (ConsumerRecord<String, String> record : recordsFound) {
+          recordsLeft.decrementAndGet();
+          results.get(record.partition()).inc();
+        }
         consumer.commitSync();
       }
     }

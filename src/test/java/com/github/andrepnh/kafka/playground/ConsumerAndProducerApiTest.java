@@ -19,7 +19,6 @@ import org.junit.Test;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 
 public class ConsumerAndProducerApiTest {
 
@@ -72,8 +71,7 @@ public class ConsumerAndProducerApiTest {
     final int records = 1000;
     ProducerFacade.produce(topic.getName(), records);
 
-    ImmutableList<ConsumerResults> results = new FluentParallelConsumer(
-        topic.getPartitions())
+    ImmutableList<ConsumerResults> results = new FluentParallelConsumer(topic.getPartitions())
         .resetOffsetToEarliest()
         .withTopicBasedGroupName(topic.getName())
         .consumeUntilNoRecordsFound(topic, 50, Duration.ofSeconds(5));
@@ -89,36 +87,34 @@ public class ConsumerAndProducerApiTest {
     final int records = 1000, consumerGroups = topic.getPartitions();
     ProducerFacade.produce(topic.getName(), records);
 
-    ImmutableListMultimap<String, ConsumerResults> resultsByGroup
-        = new FluentParallelConsumer(consumerGroups)
-          .resetOffsetToEarliest()
-          .withGroupName(groupNumber -> topic.getName() + "_group" + groupNumber)
-          .consumeUntilNoRecordsFound(topic, 10, Duration.ofSeconds(15))
-          .groupBy(ConsumerResults::getConsumerGroup);
+    ImmutableListMultimap<String, ConsumerResults> resultsByGroup =
+        new FluentParallelConsumer(consumerGroups)
+            .resetOffsetToEarliest()
+            .withGroupName(groupNumber -> topic.getName() + "_group" + groupNumber)
+            .consumeUntilNoRecordsFound(topic, 20, Duration.ofSeconds(15))
+            .groupBy(ConsumerResults::getConsumerGroup);
     resultsByGroup.forEachKeyMultiValues(
         (group, results) -> {
-          var groupResults = org.eclipse.collections.impl.factory.Lists.immutable
+          var nonEmptyResults = org.eclipse.collections.impl.factory.Lists.immutable
               .ofAll(results)
               .select(result -> result.getRecords() > 0);
-          assertEquals(topic.getPartitions(), groupResults.size());
-          assertEquals(records, groupResults.collectInt(ConsumerResults::getRecords).sum());
+          assertEquals(records, nonEmptyResults.collectInt(ConsumerResults::getRecords).sum());
         });
     printRecordsConsumedCountGroupedByGroup(resultsByGroup);
   }
 
   @Test
-  public void cannotHaveMoreConsumersThanPartitions() {
+  public void recordsAreBalancedOnlyUpToAsManyConsumersAsPartitions() {
     final var topic = TopicCreator.create("more-groups-than-partitions", 2);
-    final int records = 1, consumerQty = topic.getPartitions() + 1;
+    final int records = 100, consumerQty = topic.getPartitions() + 10;
     ProducerFacade.produce(topic.getName(), records);
 
     ImmutableList<ConsumerResults> consumersWithRecords = new FluentParallelConsumer(consumerQty)
         .resetOffsetToEarliest()
         .withTopicBasedGroupName(topic.getName())
-        .consumeUntilNoRecordsFound(topic, 20, Duration.ofSeconds(15))
+        .consumeRecords(topic, records, Duration.ofSeconds(5))
         .select(results -> results.getRecords() > 0);
-    assertNotEquals(consumerQty, consumersWithRecords.size());
-    assertEquals(records, consumersWithRecords.size());
+    assertEquals(topic.getPartitions(), consumersWithRecords.size());
     consumersWithRecords.forEach(System.out::println);
   }
 
