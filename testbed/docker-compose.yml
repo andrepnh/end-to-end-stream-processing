@@ -1,5 +1,9 @@
 version: '2'
 services:
+  # postgres:
+  #   build: postgres
+  #   ports:
+  #     - "5432:5432"
   zookeeper:
     image: wurstmeister/zookeeper
     ports:
@@ -13,3 +17,36 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  connect:
+    build: connect
+    ports:
+      - "8083:8083"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_HOST_NAME: ${DOCKER_HOST_IP}
+      KAFKA_CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONNECT_GROUP_ID: connect-cluster
+      KAFKA_CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KAFKA_CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KAFKA_CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
+      KAFKA_CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
+      KAFKA_CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KAFKA_CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KAFKA_CONNECT_INTERNAL_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      KAFKA_CONNECT_INTERNAL_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      KAFKA_CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
+      KAFKA_CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 2
+      KAFKA_CONNECT_OFFSET_STORAGE_PARTITIONS: 4
+      KAFKA_CONNECT_CONFIG_STORAGE_TOPIC: connect-configs
+      KAFKA_CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 2
+      KAFKA_CONNECT_STATUS_STORAGE_TOPIC: connect-status
+      KAFKA_CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 2
+      KAFKA_CONNECT_STATUS_STORAGE_PARTITIONS: 2
+      # KAFKA_CONNECT_REST_HOST_NAME: 127.0.0.1
+      KAFKA_CONNECT_REST_PORT: 8083
+      KAFKA_CONNECT_REST_ADVERTISED_HOST_NAME: ${DOCKER_HOST_IP}
+      KAFKA_CONNECT_REST_ADVERTISED_PORT: 8083
+      KAFKA_CONNECT_PLUGIN_PATH: /opt/kafka/connectors
+      KAFKA_CONNECT_OFFSET_FLUSH_INTERVAL_MS: 60000
+      KAFKA_CONNECT_TASK_SHUTDOWN_GRACEFUL_TIMEOUT_MS: 10000
+      KAFKA_CONNECT_OFFSET_FLUSH_TIMEOUT_MS: 5000
