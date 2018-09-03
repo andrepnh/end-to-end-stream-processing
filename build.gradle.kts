@@ -24,6 +24,8 @@ dependencies {
     compile("com.google.guava:guava:25.1-jre")
     compile("org.eclipse.collections:eclipse-collections-api:9.2.0")
     compile("org.eclipse.collections:eclipse-collections:9.2.0")
+    compile("org.postgresql:postgresql:42.2.4")
+
     testCompile("junit", "junit", "4.12")
     testCompile("org.reflections", "reflections", "0.9.11")
 }
