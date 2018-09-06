@@ -38,6 +38,20 @@ public class Main {
   private static final String INSERT_ACTIVITY = "INSERT INTO StorageNodeActivity"
       + "(storageNodeId, stockItemId, moment, quantity) VALUES (?, ?, ?, ?)";
 
+  private static final String DB_CONNECTION_STRING;
+
+  private static final String DB_USER;
+
+  private static final String DB_PASSWORD;
+
+  static {
+    DB_CONNECTION_STRING = getProperty("db.connections.string",
+        String.format("jdbc:postgresql://%s/connect_test", System.getenv("DOCKER_HOST_IP")),
+        Function.identity());
+    DB_USER = getProperty("db.connections.string", "postgres", Function.identity());
+    DB_PASSWORD = getProperty("db.connections.string", "postgres", Function.identity());
+  }
+
   public static void main(String[] args) throws InterruptedException {
     var maxNodes = getProperty("max.storage.nodes", 3000, Integer::parseInt);
     var maxItems = getProperty("max.stock.items", 10000000, Integer::parseInt);
@@ -149,7 +163,7 @@ public class Main {
     return getProperty(property, null, converter);
   }
 
-  private static <T> T getProperty(String property, Integer defaultValue, Function<String, T> converter) {
+  private static <T> T getProperty(String property, T defaultValue, Function<String, T> converter) {
     return converter.apply(System.getProperty(property, Objects.toString(defaultValue)));
   }
 
@@ -176,7 +190,7 @@ public class Main {
 
     @Override
     public Void call() throws Exception {
-      try (var conn = DriverManager.getConnection("jdbc:postgresql://192.168.99.100/connect_test", "postgres", "postgres");
+      try (var conn = DriverManager.getConnection(DB_CONNECTION_STRING, DB_USER, DB_PASSWORD);
            var preparedStatement = conn.prepareStatement(insert)) {
         conn.setAutoCommit(false);
         int entitiesRemaining = 0;

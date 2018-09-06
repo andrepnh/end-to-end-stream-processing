@@ -2,6 +2,8 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
     java
+    application
+    id("com.github.johnrengelman.shadow") version("2.0.4")
 }
 
 group = "com.github.andrepnh"
@@ -32,4 +34,8 @@ dependencies {
 
 configure<JavaPluginConvention> {
     sourceCompatibility = JavaVersion.VERSION_1_10
+}
+
+configure<ApplicationPluginConvention> {
+    mainClassName = "com.github.andrepnh.kafka.playground.Main"
 }

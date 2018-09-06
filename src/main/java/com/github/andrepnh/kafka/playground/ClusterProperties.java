@@ -9,7 +9,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.eclipse.collections.api.list.primitive.ImmutableIntList;
 
 public final class ClusterProperties {
-  public static final int BROKERS = 3;
+  public static final int BROKERS = Integer.parseInt(System.getenv("KAFKA_BROKERS"));
   public static final ImmutableIntList KAFKA_HOST_PORTS;
   public static final String KAFKA_HOST;
   public static final String BOOTSTRAP_SERVERS;

@@ -105,8 +105,8 @@ public class ConsumerAndProducerApiTest {
 
   @Test
   public void recordsAreBalancedOnlyUpToAsManyConsumersAsPartitions() {
-    final var topic = TopicCreator.create("more-groups-than-partitions", 2);
-    final int records = 100, consumerQty = topic.getPartitions() + 10;
+    final var topic = TopicCreator.create("more-consumers-than-partitions", 2);
+    final int records = 1000, consumerQty = topic.getPartitions() + 10;
     ProducerFacade.produce(topic.getName(), records);
 
     ImmutableList<ConsumerResults> consumersWithRecords = new FluentParallelConsumer(consumerQty)
