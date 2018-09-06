@@ -6,6 +6,7 @@ import java.time.ZonedDateTime;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public final class Generator {
   private static final long MAX_EPOCH_OFFSET_MILLIS =
@@ -35,8 +36,10 @@ public final class Generator {
     return words(5);
   }
 
-  public static String words(int words) {
-    return IntStream.range(0, words).mapToObj(i -> word()).collect(Collectors.joining(" "));
+  public static String words(int maxWords) {
+    return Stream.generate(Generator::word)
+        .limit(RNG.nextInt(maxWords) + 1)
+        .collect(Collectors.joining(" "));
   }
 
   public static String word() {
@@ -44,7 +47,7 @@ public final class Generator {
   }
 
   public static String word(int maxLength) {
-    return IntStream.range(0, maxLength)
+    return IntStream.range(0, RNG.nextInt(maxLength) + 1)
         .mapToObj(i -> letter(i == 0))
         .collect(Collectors.joining());
   }

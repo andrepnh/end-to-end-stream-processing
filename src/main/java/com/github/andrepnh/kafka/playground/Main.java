@@ -1,7 +1,5 @@
 package com.github.andrepnh.kafka.playground;
 
-import static com.google.common.base.Preconditions.checkState;
-
 import com.github.andrepnh.kafka.playground.db.gen.StockItem;
 import com.github.andrepnh.kafka.playground.db.gen.StorageNode;
 import com.github.andrepnh.kafka.playground.db.gen.StorageNodeActivity;
@@ -40,8 +38,6 @@ public class Main {
   private static final String INSERT_ACTIVITY = "INSERT INTO StorageNodeActivity"
       + "(storageNodeId, stockItemId, moment, quantity) VALUES (?, ?, ?, ?)";
 
-  public static final Set<Object> INSERTED = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
   public static void main(String[] args) throws InterruptedException {
     var maxNodes = getProperty("max.storage.nodes", 3000, Integer::parseInt);
     var maxItems = getProperty("max.stock.items", 10000000, Integer::parseInt);
@@ -53,13 +49,13 @@ public class Main {
     populateInParallel(nodes, items, activities, maxNodes, maxItems, activityRecords);
 
     List<Future<Void>> nodeFutures = IO_EXECUTOR
-        .invokeAll(insertNodesWorkers(IO_PARALLELISM / 2, nodes, 1000));
+        .invokeAll(insertNodesWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(nodes), 1000));
     List<Future<Void>> itemFutures = IO_EXECUTOR
-        .invokeAll(insertItemsWorkers(IO_PARALLELISM, items, 1000));
+        .invokeAll(insertItemsWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(items), 1000));
     checkSuccessfulInserts(nodeFutures, itemFutures);
 
     List<Future<Void>> activityFutures = IO_EXECUTOR
-        .invokeAll(insertActivitiesWorkers(IO_PARALLELISM, activities, 1000));
+        .invokeAll(insertActivitiesWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(activities), 1000));
     IO_EXECUTOR.shutdown();
     checkSuccessfulInserts(activityFutures);
   }
@@ -104,7 +100,7 @@ public class Main {
         });
   }
 
-  private static Collection<Callable<Void>> insertNodesWorkers(int workers, Set<StorageNode> entities, int batchSize) {
+  private static Collection<Callable<Void>> insertNodesWorkers(int workers, ConcurrentLinkedQueue<StorageNode> entities, int batchSize) {
     BiConsumer<PreparedStatement, StorageNode> setParameters = (insert, node) -> {
       try {
         insert.setInt(1, node.getId());
@@ -118,7 +114,7 @@ public class Main {
         .collect(Collectors.toList());
   }
 
-  private static Collection<Callable<Void>> insertItemsWorkers(int workers, Set<StockItem> entities, int batchSize) {
+  private static Collection<Callable<Void>> insertItemsWorkers(int workers, ConcurrentLinkedQueue<StockItem> entities, int batchSize) {
     BiConsumer<PreparedStatement, StockItem> setParameters = (insert, item) -> {
       try {
         insert.setInt(1, item.getId());
@@ -132,7 +128,7 @@ public class Main {
         .collect(Collectors.toList());
   }
 
-  private static Collection<Callable<Void>> insertActivitiesWorkers(int workers, Set<StorageNodeActivity> entities, int batchSize) {
+  private static Collection<Callable<Void>> insertActivitiesWorkers(int workers, ConcurrentLinkedQueue<StorageNodeActivity> entities, int batchSize) {
     BiConsumer<PreparedStatement, StorageNodeActivity> setParameters = (insert, activity) -> {
       try {
         insert.setInt(1, activity.getStorageNodeId());
@@ -164,14 +160,14 @@ public class Main {
     private final BiConsumer<PreparedStatement, T> setParameters;
     private final boolean debug;
 
-    public Worker(Set<T> entities, String insert, int batchSize,
+    public Worker(ConcurrentLinkedQueue<T> entities, String insert, int batchSize,
         BiConsumer<PreparedStatement, T> setParameters) {
       this(entities, insert, batchSize, setParameters, false);
     }
 
-    public Worker(Set<T> entities, String insert, int batchSize,
+    public Worker(ConcurrentLinkedQueue<T> entities, String insert, int batchSize,
         BiConsumer<PreparedStatement, T> setParameters, boolean debug) {
-      this.entities = new ConcurrentLinkedQueue<>(entities);
+      this.entities = entities;
       this.insert = insert;
       this.batchSize = batchSize;
       this.setParameters = setParameters;
@@ -180,42 +176,39 @@ public class Main {
 
     @Override
     public Void call() throws Exception {
-      try (var conn = DriverManager.getConnection("jdbc:postgresql://192.168.99.100/connect_test", "postgres", "postgres")) {
-        var preparedStatement = conn.prepareStatement(insert);
+      try (var conn = DriverManager.getConnection("jdbc:postgresql://192.168.99.100/connect_test", "postgres", "postgres");
+           var preparedStatement = conn.prepareStatement(insert)) {
         conn.setAutoCommit(false);
-        var entitiesRemaining = false;
+        int entitiesRemaining = 0;
         for (int row = 0; !entities.isEmpty(); row++) {
           var entity = entities.poll();
           if (entity == null) {
             break;
           }
-          checkState(!debug || INSERTED.add(entity));
           setParameters.accept(preparedStatement, entity);
           preparedStatement.addBatch();
-          entitiesRemaining = true;
+          entitiesRemaining++;
           if (row != 0 && row % batchSize == 0) {
-            preparedStatement = commitBatch(conn, preparedStatement);
+            commitBatch(conn, preparedStatement);
             System.out.format("%d inserted\n", batchSize);
-            entitiesRemaining = false;
+            entitiesRemaining = 0;
           }
         }
 
-        if (entitiesRemaining) {
-          commitBatch(conn, preparedStatement).close();
-          System.out.println("Inserted a few remaining entities");
+        if (entitiesRemaining > 0) {
+          commitBatch(conn, preparedStatement);
+          System.out.format("%d inserted\n", entitiesRemaining);
         }
 
         return null;
       }
     }
 
-    private PreparedStatement commitBatch(Connection conn, PreparedStatement preparedStatement) {
+    private void commitBatch(Connection conn, PreparedStatement preparedStatement) {
       try {
         preparedStatement.executeBatch();
         conn.commit();
         preparedStatement.clearParameters();
-        preparedStatement.close();
-        return conn.prepareStatement(insert);
       } catch (SQLException e) {
         try {
           conn.rollback();
