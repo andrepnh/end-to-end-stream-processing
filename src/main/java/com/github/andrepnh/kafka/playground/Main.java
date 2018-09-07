@@ -27,16 +27,17 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Main {
-  private static final int IO_PARALLELISM = Runtime.getRuntime().availableProcessors() * 8;
+  private static final int IO_PARALLELISM;
 
-  private static final ExecutorService IO_EXECUTOR = Executors.newFixedThreadPool(IO_PARALLELISM);
+  private static final ExecutorService IO_EXECUTOR;
 
   private static final String INSERT_NODE = "INSERT INTO StorageNode(id, name) VALUES (?, ?)";
 
   private static final String INSERT_ITEM = "INSERT INTO StockItem(id, description) VALUES (?, ?)";
 
-  private static final String INSERT_ACTIVITY = "INSERT INTO StorageNodeActivity"
-      + "(storageNodeId, stockItemId, moment, quantity) VALUES (?, ?, ?, ?)";
+  private static final String INSERT_ACTIVITY =
+      "INSERT INTO StorageNodeActivity"
+          + "(storageNodeId, stockItemId, moment, quantity) VALUES (?, ?, ?, ?)";
 
   private static final String DB_CONNECTION_STRING;
 
@@ -45,31 +46,40 @@ public class Main {
   private static final String DB_PASSWORD;
 
   static {
-    DB_CONNECTION_STRING = getProperty("db.connections.string",
-        String.format("jdbc:postgresql://%s/connect_test", System.getenv("DOCKER_HOST_IP")),
-        Function.identity());
+    IO_PARALLELISM = getProperty(
+        "io.parallelism",
+        Runtime.getRuntime().availableProcessors() * 2,
+        Integer::parseInt);
+    IO_EXECUTOR = Executors.newFixedThreadPool(IO_PARALLELISM);
+    DB_CONNECTION_STRING =
+        getProperty(
+            "db.connections.string",
+            String.format("jdbc:postgresql://%s/connect_test", System.getenv("DOCKER_HOST_IP")),
+            Function.identity());
     DB_USER = getProperty("db.connections.string", "postgres", Function.identity());
     DB_PASSWORD = getProperty("db.connections.string", "postgres", Function.identity());
   }
 
   public static void main(String[] args) throws InterruptedException {
-    var maxNodes = getProperty("max.storage.nodes", 3000, Integer::parseInt);
-    var maxItems = getProperty("max.stock.items", 10000000, Integer::parseInt);
-    var activityRecords = getProperty("activity.records.to.generate", 100000, Integer::parseInt);
+    var maxNodes = getProperty("max.storage.nodes", 300, Integer::parseInt);
+    var maxItems = getProperty("max.stock.items", 1000000, Integer::parseInt);
+    var activityRecords = getProperty("activity.records.to.generate", 10000, Integer::parseInt);
 
     var nodes = Collections.newSetFromMap(new ConcurrentHashMap<StorageNode, Boolean>(maxNodes));
-    var items = Collections.newSetFromMap(new ConcurrentHashMap<StockItem, Boolean>(Math.min(maxItems, activityRecords)));
-    var activities = Collections.newSetFromMap(new ConcurrentHashMap<StorageNodeActivity, Boolean>(activityRecords));
+    var items = Collections.newSetFromMap(
+        new ConcurrentHashMap<StockItem, Boolean>(Math.min(maxItems, activityRecords)));
+    var activities = Collections.newSetFromMap(
+        new ConcurrentHashMap<StorageNodeActivity, Boolean>(activityRecords));
     populateInParallel(nodes, items, activities, maxNodes, maxItems, activityRecords);
 
-    List<Future<Void>> nodeFutures = IO_EXECUTOR
-        .invokeAll(insertNodesWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(nodes), 1000));
-    List<Future<Void>> itemFutures = IO_EXECUTOR
-        .invokeAll(insertItemsWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(items), 1000));
+    List<Future<Void>> nodeFutures = IO_EXECUTOR.invokeAll(
+        insertNodesWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(nodes), 1000));
+    List<Future<Void>> itemFutures = IO_EXECUTOR.invokeAll(
+        insertItemsWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(items), 1000));
     checkSuccessfulInserts(nodeFutures, itemFutures);
 
-    List<Future<Void>> activityFutures = IO_EXECUTOR
-        .invokeAll(insertActivitiesWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(activities), 1000));
+    List<Future<Void>> activityFutures = IO_EXECUTOR.invokeAll(
+        insertActivitiesWorkers(IO_PARALLELISM, new ConcurrentLinkedQueue<>(activities), 1000));
     IO_EXECUTOR.shutdown();
     checkSuccessfulInserts(activityFutures);
   }
@@ -78,7 +88,8 @@ public class Main {
     checkSuccessfulInserts(futures, new ArrayList<>());
   }
 
-  private static void checkSuccessfulInserts(List<Future<Void>> futures1, List<Future<Void>> futures2) {
+  private static void checkSuccessfulInserts(
+      List<Future<Void>> futures1, List<Future<Void>> futures2) {
     Stream.concat(futures1.stream(), futures2.stream())
         .forEach(future -> {
           try {
@@ -89,18 +100,19 @@ public class Main {
         });
   }
 
-  private static void populateInParallel(Set<StorageNode> nodes, Set<StockItem> items,
-      Set<StorageNodeActivity> activities, int maxNodes,
+  private static void populateInParallel(
+      Set<StorageNode> nodes,
+      Set<StockItem> items,
+      Set<StorageNodeActivity> activities,
+      int maxNodes,
       int maxItems,
       int activityRecords) {
-    Stream
-        .generate(() -> {
+    Stream.generate(() -> {
           var node = StorageNode.random(maxNodes);
           var item = StockItem.random(maxItems);
           var record = StorageNodeActivity.random(node.getId(), item.getId());
           return Stream.of(node, item, record);
-        })
-        .parallel()
+        }).parallel()
         .limit(activityRecords)
         .flatMap(Function.identity())
         .forEach(entity -> {
@@ -114,46 +126,51 @@ public class Main {
         });
   }
 
-  private static Collection<Callable<Void>> insertNodesWorkers(int workers, ConcurrentLinkedQueue<StorageNode> entities, int batchSize) {
-    BiConsumer<PreparedStatement, StorageNode> setParameters = (insert, node) -> {
-      try {
-        insert.setInt(1, node.getId());
-        insert.setString(2, node.getName());
-      } catch (SQLException e) {
-        throw new IllegalStateException(e);
-      }
-    };
+  private static Collection<Callable<Void>> insertNodesWorkers(
+      int workers, ConcurrentLinkedQueue<StorageNode> entities, int batchSize) {
+    BiConsumer<PreparedStatement, StorageNode> setParameters =
+        (insert, node) -> {
+          try {
+            insert.setInt(1, node.getId());
+            insert.setString(2, node.getName());
+          } catch (SQLException e) {
+            throw new IllegalStateException(e);
+          }
+        };
     return Stream.generate(() -> new Worker<>(entities, INSERT_NODE, batchSize, setParameters))
         .limit(workers)
         .collect(Collectors.toList());
   }
 
-  private static Collection<Callable<Void>> insertItemsWorkers(int workers, ConcurrentLinkedQueue<StockItem> entities, int batchSize) {
-    BiConsumer<PreparedStatement, StockItem> setParameters = (insert, item) -> {
-      try {
-        insert.setInt(1, item.getId());
-        insert.setString(2, item.getDescription());
-      } catch (SQLException e) {
-        throw new IllegalStateException(e);
-      }
-    };
+  private static Collection<Callable<Void>> insertItemsWorkers(
+      int workers, ConcurrentLinkedQueue<StockItem> entities, int batchSize) {
+    BiConsumer<PreparedStatement, StockItem> setParameters =
+        (insert, item) -> {
+          try {
+            insert.setInt(1, item.getId());
+            insert.setString(2, item.getDescription());
+          } catch (SQLException e) {
+            throw new IllegalStateException(e);
+          }
+        };
     return Stream.generate(() -> new Worker<>(entities, INSERT_ITEM, batchSize, setParameters))
         .limit(workers)
         .collect(Collectors.toList());
   }
 
-  private static Collection<Callable<Void>> insertActivitiesWorkers(int workers, ConcurrentLinkedQueue<StorageNodeActivity> entities, int batchSize) {
-    BiConsumer<PreparedStatement, StorageNodeActivity> setParameters = (insert, activity) -> {
-      try {
-        insert.setInt(1, activity.getStorageNodeId());
-        insert.setInt(2, activity.getStockItemId());
-        insert.setTimestamp(
-            3, new Timestamp(activity.getMoment().toInstant().toEpochMilli()));
-        insert.setInt(4, activity.getQuantity());
-      } catch (SQLException e) {
-        throw new IllegalStateException(e);
-      }
-    };
+  private static Collection<Callable<Void>> insertActivitiesWorkers(
+      int workers, ConcurrentLinkedQueue<StorageNodeActivity> entities, int batchSize) {
+    BiConsumer<PreparedStatement, StorageNodeActivity> setParameters =
+        (insert, activity) -> {
+          try {
+            insert.setInt(1, activity.getStorageNodeId());
+            insert.setInt(2, activity.getStockItemId());
+            insert.setTimestamp(3, new Timestamp(activity.getMoment().toInstant().toEpochMilli()));
+            insert.setInt(4, activity.getQuantity());
+          } catch (SQLException e) {
+            throw new IllegalStateException(e);
+          }
+        };
     return Stream.generate(() -> new Worker<>(entities, INSERT_ACTIVITY, batchSize, setParameters))
         .limit(workers)
         .collect(Collectors.toList());
@@ -174,13 +191,20 @@ public class Main {
     private final BiConsumer<PreparedStatement, T> setParameters;
     private final boolean debug;
 
-    public Worker(ConcurrentLinkedQueue<T> entities, String insert, int batchSize,
+    public Worker(
+        ConcurrentLinkedQueue<T> entities,
+        String insert,
+        int batchSize,
         BiConsumer<PreparedStatement, T> setParameters) {
       this(entities, insert, batchSize, setParameters, false);
     }
 
-    public Worker(ConcurrentLinkedQueue<T> entities, String insert, int batchSize,
-        BiConsumer<PreparedStatement, T> setParameters, boolean debug) {
+    public Worker(
+        ConcurrentLinkedQueue<T> entities,
+        String insert,
+        int batchSize,
+        BiConsumer<PreparedStatement, T> setParameters,
+        boolean debug) {
       this.entities = entities;
       this.insert = insert;
       this.batchSize = batchSize;
@@ -233,5 +257,4 @@ public class Main {
       }
     }
   }
-
 }
