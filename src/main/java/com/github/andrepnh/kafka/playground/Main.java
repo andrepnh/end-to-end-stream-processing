@@ -28,13 +28,16 @@ public class Main {
       "INSERT INTO StockItem(id, description) VALUES (?, ?) ON CONFLICT DO NOTHING";
 
   private static final String INSERT_SUPPLY =
-      "INSERT INTO StockSupply (warehouseId, stockItemId, quantity) VALUES (?, ?, ?)";
+      "INSERT INTO StockSupply (warehouseId, stockItemId, quantity) VALUES (?, ?, ?) "
+    + "ON CONFLICT UPDATE";
 
   private static final String INSERT_DEMAND =
-      "INSERT INTO StockDemand (warehouseId, stockItemId, quantity) VALUES (?, ?, ?)";
+      "INSERT INTO StockDemand (warehouseId, stockItemId, quantity) VALUES (?, ?, ?) "
+    + "ON CONFLICT UPDATE";
 
   private static final String INSERT_RESERVATION =
-      "INSERT INTO StockReservation (warehouseId, stockItemId, quantity) VALUES (?, ?, ?)";
+      "INSERT INTO StockReservation (warehouseId, stockItemId, quantity) VALUES (?, ?, ?) "
+    + "ON CONFLICT UPDATE";
 
   public static void main(String[] args) {
     var maxWarehouses = getProperty("max.warehouses", 300, Integer::parseInt);
