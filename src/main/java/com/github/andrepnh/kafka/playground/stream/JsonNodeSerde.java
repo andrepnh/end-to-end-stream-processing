@@ -2,6 +2,7 @@ package com.github.andrepnh.kafka.playground.stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import java.io.IOException;
 import java.util.Map;
 import org.apache.kafka.common.errors.SerializationException;
@@ -66,7 +67,10 @@ public class JsonNodeSerde implements Serde<JsonNode> {
     @Override
     public JsonNode deserialize(String topic, byte[] data) {
       try {
-        return MAPPER.readTree(topic);
+        if (data == null || data.length == 0) {
+          return null;
+        }
+        return MAPPER.readTree(data);
       } catch (IOException e) {
         throw new SerializationException(e);
       }
