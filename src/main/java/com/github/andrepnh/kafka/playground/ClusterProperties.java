@@ -23,8 +23,6 @@ public final class ClusterProperties {
     BOOTSTRAP_SERVERS = KAFKA_HOST_PORTS.collect(port -> KAFKA_HOST + ":" + port).makeString(",");
   }
 
-
-
   public static ImmutableMap.Builder<String, Object> newDefaultConsumerProperties() {
     return ImmutableMap.<String, Object>builder()
         .put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, ClusterProperties.BOOTSTRAP_SERVERS)
