@@ -2,11 +2,8 @@ package com.github.andrepnh.kafka.playground;
 
 import com.github.andrepnh.kafka.playground.db.gen.Generator;
 import com.github.andrepnh.kafka.playground.db.gen.StockItem;
-import com.github.andrepnh.kafka.playground.db.gen.StockReservation;
-import com.github.andrepnh.kafka.playground.db.gen.StockSupply;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
-import com.github.andrepnh.kafka.playground.db.gen.StockActivity;
-import com.github.andrepnh.kafka.playground.db.gen.StockDemand;
+import com.github.andrepnh.kafka.playground.db.gen.StockState;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Tables;
 import java.sql.Connection;
@@ -27,47 +24,25 @@ public class Main {
   private static final String INSERT_ITEM =
       "INSERT INTO StockItem(id, description) VALUES (?, ?) ON CONFLICT DO NOTHING";
 
-  private static final String INSERT_SUPPLY =
-      "INSERT INTO StockSupply (warehouseId, stockItemId, quantity) VALUES (?, ?, ?) "
-    + "ON CONFLICT UPDATE";
-
-  private static final String INSERT_DEMAND =
-      "INSERT INTO StockDemand (warehouseId, stockItemId, quantity) VALUES (?, ?, ?) "
-    + "ON CONFLICT UPDATE";
-
-  private static final String INSERT_RESERVATION =
-      "INSERT INTO StockReservation (warehouseId, stockItemId, quantity) VALUES (?, ?, ?) "
-    + "ON CONFLICT UPDATE";
+  private static final String INSERT_STOCK =
+      "INSERT INTO StockState (warehouseId, stockItemId, supply, demand, reserved) "
+    + "VALUES (?, ?, ?, ?, ?) "
+    + "ON CONFLICT (warehouseId, stockItemId) DO UPDATE SET supply = ?, demand = ?, reserved = ?";
 
   public static void main(String[] args) {
     var maxWarehouses = getProperty("max.warehouses", 300, Integer::parseInt);
-    var maxItems = getProperty("max.stock.items", 1000000, Integer::parseInt);
-    var activityRecords = getProperty("activity.records.to.generate", 10000, Integer::parseInt);
+    var maxItems = getProperty("max.items", 1000000, Integer::parseInt);
+    var stocks = getProperty("stock.to.generate", 10000, Integer::parseInt);
     Supplier<Connection> dbConnectionSupplier = createDbConnectionSupplier();
 
-    var warehouseActivityTypes = Lists.newArrayList(
-        StockSupply.class,
-        StockDemand.class,
-        StockReservation.class);
     Stream
         .generate(() -> {
           var warehouse = Warehouse.random(maxWarehouses);
           var item = StockItem.random(maxItems);
-          StockActivity activity;
-          var activityType = Generator.choose(warehouseActivityTypes);
-          if (activityType == StockSupply.class) {
-            activity = StockSupply.random(warehouse.getId(), item.getId());
-          } else if (activityType == StockDemand.class) {
-            activity = StockDemand.random(warehouse.getId(), item.getId());
-          } else if (activityType == StockReservation.class) {
-            activity = StockReservation.random(warehouse.getId(), item.getId());
-          } else {
-            throw new IllegalStateException("Unknown warehouse activity type: " + activityType);
-          }
-          return Tables.immutableCell(warehouse, item, activity);
+          return Tables.immutableCell(warehouse, item, StockState.random(warehouse.getId(), item.getId()));
         })
         .parallel()
-        .limit(activityRecords)
+        .limit(stocks)
         .peek(unused -> {
           try {
             TimeUnit.MILLISECONDS.sleep(12);
@@ -78,10 +53,10 @@ public class Main {
         .forEach(triple -> {
           Warehouse warehouse = triple.getRowKey();
           StockItem item = triple.getColumnKey();
-          StockActivity activity = triple.getValue();
+          StockState stock = triple.getValue();
           insert(warehouse, dbConnectionSupplier);
           insert(item, dbConnectionSupplier);
-          insert(activity, dbConnectionSupplier);
+          insert(stock, dbConnectionSupplier);
         });
   }
 
@@ -127,21 +102,16 @@ public class Main {
     }
   }
 
-  private static void insert(StockActivity activity, Supplier<Connection> connectionSupplier) {
-    String insert;
-    if (activity instanceof StockSupply) {
-      insert = INSERT_SUPPLY;
-    } else if (activity instanceof StockDemand) {
-      insert = INSERT_DEMAND;
-    } else if (activity instanceof StockReservation) {
-      insert = INSERT_RESERVATION;
-    } else {
-      throw new IllegalStateException("Unknown warehouse activity type for activity: " + activity);
-    }
-    try (var preparedStatement = connectionSupplier.get().prepareStatement(insert)) {
-      preparedStatement.setInt(1, activity.getWarehouseId());
-      preparedStatement.setInt(2, activity.getStockItemId());
-      preparedStatement.setInt(3, activity.getStockItemId());
+  private static void insert(StockState stock, Supplier<Connection> connectionSupplier) {
+    try (var preparedStatement = connectionSupplier.get().prepareStatement(INSERT_STOCK)) {
+      preparedStatement.setInt(1, stock.getWarehouseId());
+      preparedStatement.setInt(2, stock.getStockItemId());
+      preparedStatement.setInt(3, stock.getSupply());
+      preparedStatement.setInt(4, stock.getDemand());
+      preparedStatement.setInt(5, stock.getReserved());
+      preparedStatement.setInt(6, stock.getSupply());
+      preparedStatement.setInt(7, stock.getDemand());
+      preparedStatement.setInt(8, stock.getReserved());
       preparedStatement.execute();
     } catch (SQLException ex) {
       throw new IllegalStateException(ex);

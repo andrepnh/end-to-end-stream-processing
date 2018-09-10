@@ -18,24 +18,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
         storageCapacity     int NOT NULL
     );
 
-    CREATE TABLE StockSupply (
+    CREATE TABLE StockState (
         warehouseId         int NOT NULL REFERENCES Warehouse,
         stockItemId         int NOT NULL REFERENCES StockItem,
-        quantity            int NOT NULL,
-        PRIMARY KEY(warehouseId, stockItemId)
-    );
-
-    CREATE TABLE StockDemand (
-        warehouseId         int NOT NULL REFERENCES Warehouse,
-        stockItemId         int NOT NULL REFERENCES StockItem,
-        quantity            int NOT NULL,
-        PRIMARY KEY(warehouseId, stockItemId)
-    );
-
-    CREATE TABLE StockReservation (
-        warehouseId         int NOT NULL REFERENCES Warehouse,
-        stockItemId         int NOT NULL REFERENCES StockItem,
-        quantity            int NOT NULL,
+        supply              int NOT NULL,
+        demand              int NOT NULL,
+        reserved            int NOT NULL,
         PRIMARY KEY(warehouseId, stockItemId)
     );
 EOSQL
