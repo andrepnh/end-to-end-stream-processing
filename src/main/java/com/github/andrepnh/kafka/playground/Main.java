@@ -1,14 +1,15 @@
 package com.github.andrepnh.kafka.playground;
 
-import com.github.andrepnh.kafka.playground.db.gen.Generator;
 import com.github.andrepnh.kafka.playground.db.gen.StockItem;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.github.andrepnh.kafka.playground.db.gen.StockState;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Tables;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -25,9 +26,10 @@ public class Main {
       "INSERT INTO StockItem(id, description) VALUES (?, ?) ON CONFLICT DO NOTHING";
 
   private static final String INSERT_STOCK =
-      "INSERT INTO StockState (warehouseId, stockItemId, supply, demand, reserved) "
-    + "VALUES (?, ?, ?, ?, ?) "
-    + "ON CONFLICT (warehouseId, stockItemId) DO UPDATE SET supply = ?, demand = ?, reserved = ?";
+      "INSERT INTO StockState (warehouseId, stockItemId, supply, demand, reserved, lastUpdate) "
+    + "VALUES (?, ?, ?, ?, ?, ?) "
+    + "ON CONFLICT (warehouseId, stockItemId) DO "
+    + "UPDATE SET supply = ?, demand = ?, reserved = ?, lastUpdate = ?";
 
   public static void main(String[] args) {
     var maxWarehouses = getProperty("max.warehouses", 300, Integer::parseInt);
@@ -109,9 +111,11 @@ public class Main {
       preparedStatement.setInt(3, stock.getSupply());
       preparedStatement.setInt(4, stock.getDemand());
       preparedStatement.setInt(5, stock.getReserved());
-      preparedStatement.setInt(6, stock.getSupply());
-      preparedStatement.setInt(7, stock.getDemand());
-      preparedStatement.setInt(8, stock.getReserved());
+      preparedStatement.setTimestamp(6, new Timestamp(stock.getLastUpdate().toInstant().toEpochMilli()));
+      preparedStatement.setInt(7, stock.getSupply());
+      preparedStatement.setInt(8, stock.getDemand());
+      preparedStatement.setInt(9, stock.getReserved());
+      preparedStatement.setTimestamp(10, new Timestamp(stock.getLastUpdate().toInstant().toEpochMilli()));
       preparedStatement.execute();
     } catch (SQLException ex) {
       throw new IllegalStateException(ex);
