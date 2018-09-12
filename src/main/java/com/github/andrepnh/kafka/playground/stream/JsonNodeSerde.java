@@ -46,7 +46,7 @@ public class JsonNodeSerde implements Serde<JsonNode> {
     @Override
     public byte[] serialize(String topic, JsonNode data) {
       try {
-        return data.binaryValue();
+        return MAPPER.writeValueAsBytes(data);
       } catch (IOException e) {
         throw new SerializationException(e);
       }
