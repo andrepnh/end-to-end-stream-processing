@@ -3,29 +3,43 @@ package com.github.andrepnh.kafka.playground.stream;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.security.Key;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.UUID;
+import java.util.function.Function;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.Windowed;
 
 public class StreamProcessor {
   public static void main(String[] args) {
     var processor = new StreamProcessor();
     var builder = new StreamsBuilder();
+    Function<Integer, JsonNode> numericNodeFactory = JsonNodeFactory.instance::numberNode;
     KStream<JsonNode, JsonNode> stockStream = builder
         .<JsonNode, JsonNode>stream("connect_test.public.stockstate")
         .map(processor::stripMetadata);
-    KTable<JsonNode, JsonNode> reducedStock = stockStream
-        .groupBy((warehouseItemPair, stockState) -> warehouseItemPair.get(1))
-        .reduce(processor::maxByLastUpdate);
-    reducedStock.toStream().to("reduced-stock");
+    KStream<JsonNode, JsonNode> warehouseStock = stockStream
+        .groupByKey()
+        .windowedBy(TimeWindows.of(2000))
+        .reduce(processor::maxByLastUpdate)
+        .toStream()
+        .selectKey((window, value) -> window.key());
+    warehouseStock.to("warehouse-stock");
+    KTable<JsonNode, JsonNode> globalStock = warehouseStock
+        .groupBy((warehouseItemPair, qty) -> warehouseItemPair.get(1))
+        .aggregate(() -> numericNodeFactory.apply(0),
+            (key, value, acc) -> numericNodeFactory.apply(value.asInt() + acc.asInt()));
+    globalStock.toStream().to("global-stock");
 
     var properties = StreamProperties.newDefaultStreamProperties(UUID.randomUUID().toString());
     Topology topology = builder.build();
