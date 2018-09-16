@@ -13,12 +13,17 @@ repositories {
     mavenCentral()
 }
 
-project.tasks.withType(Test::class.java) {
+val test by tasks.getting(Test::class) {
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).takeIf { it > 0 } ?: 1
     testLogging {
         events(TestLogEvent.STARTED ,
                 TestLogEvent.FAILED, TestLogEvent.PASSED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR)
     }
+}
+
+project.tasks.withType(JavaCompile::class.java) {
+    // This javac arg combined with Jackson's parameter names module allow us to avoid @JsonCreator
+    options.compilerArgs.add("-parameters")
 }
 
 dependencies {
@@ -30,6 +35,8 @@ dependencies {
     compile("org.apache.kafka:kafka-streams:2.0.0")
     compile("com.fasterxml.jackson.core:jackson-core:2.9.6")
     compile("org.slf4j:slf4j-simple:1.7.25")
+    compile( "com.fasterxml.jackson.module:jackson-module-parameter-names:2.9.6")
+    compile("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.9.6")
 
     testCompile("junit", "junit", "4.12")
     testCompile("org.reflections", "reflections", "0.9.11")

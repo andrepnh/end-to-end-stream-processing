@@ -1,67 +1,47 @@
 package com.github.andrepnh.kafka.playground.stream;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import java.io.IOException;
-import java.util.Map;
 import org.apache.kafka.common.errors.SerializationException;
 import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
 
-public class JsonNodeSerde implements Serde<JsonNode> {
-  private static final ObjectMapper MAPPER = new ObjectMapper();
-
-  public static ObjectMapper mapper() {
-    return MAPPER;
-  }
-
-  @Override
-  public void configure(Map<String, ?> configs, boolean isKey) {
-    // noop
-  }
-
-  @Override
-  public void close() {
-    // noop
-  }
-
+public class JsonNodeSerde implements SimpleSerde<JsonNode> {
   @Override
   public Serializer<JsonNode> serializer() {
-    return new JsonNodeSerializer();
+    return new JsonNodeSerializer(SerializationUtils.SHARED_MAPPER);
   }
 
   @Override
   public Deserializer<JsonNode> deserializer() {
-    return new JsonNodeDeserializer();
+    return new JsonNodeDeserializer(SerializationUtils.SHARED_MAPPER);
   }
 
-  private static class JsonNodeSerializer implements Serializer<JsonNode> {
-    @Override
-    public void configure(Map<String, ?> configs, boolean isKey) {
-      // noop
+  private static class JsonNodeSerializer implements SimpleSerializer<JsonNode> {
+    private final ObjectMapper mapper;
+
+    public JsonNodeSerializer(ObjectMapper mapper) {
+      this.mapper = checkNotNull(mapper);
     }
 
     @Override
     public byte[] serialize(String topic, JsonNode data) {
       try {
-        return MAPPER.writeValueAsBytes(data);
+        return mapper.writeValueAsBytes(data);
       } catch (IOException e) {
         throw new SerializationException(e);
       }
     }
-
-    @Override
-    public void close() {
-      // noop
-    }
   }
 
-  private static class JsonNodeDeserializer implements Deserializer<JsonNode> {
-    @Override
-    public void configure(Map<String, ?> configs, boolean isKey) {
-      // noop
+  private static class JsonNodeDeserializer implements SimpleDeserializer<JsonNode> {
+    private final ObjectMapper mapper;
+
+    public JsonNodeDeserializer(ObjectMapper mapper) {
+      this.mapper = checkNotNull(mapper);
     }
 
     @Override
@@ -70,15 +50,10 @@ public class JsonNodeSerde implements Serde<JsonNode> {
         if (data == null || data.length == 0) {
           return null;
         }
-        return MAPPER.readTree(data);
+        return mapper.readTree(data);
       } catch (IOException e) {
         throw new SerializationException(e);
       }
-    }
-
-    @Override
-    public void close() {
-      // noop
     }
   }
 

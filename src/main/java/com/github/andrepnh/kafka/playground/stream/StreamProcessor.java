@@ -1,39 +1,59 @@
 package com.github.andrepnh.kafka.playground.stream;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.time.Instant;
+import com.github.andrepnh.kafka.playground.db.gen.StockState;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.Serialized;
 
 public class StreamProcessor {
   public static void main(String[] args) {
     var processor = new StreamProcessor();
     var builder = new StreamsBuilder();
-    Function<Integer, JsonNode> numericNodeFactory = JsonNodeFactory.instance::numberNode;
-    KStream<JsonNode, JsonNode> stockStream = builder
+    KStream<List<Integer>, StockState> stockStream = builder
         .<JsonNode, JsonNode>stream("connect_test.public.stockstate")
-        .map(processor::stripMetadata);
-    KStream<JsonNode, JsonNode> warehouseStock = stockStream
-        .groupByKey()
-        .reduce(processor::maxByLastUpdate)
-        .toStream();
-    warehouseStock.to("warehouse-stock");
-    KTable<JsonNode, JsonNode> globalStock = warehouseStock
-        .groupBy((warehouseItemPair, qty) -> warehouseItemPair.get(1))
-        .aggregate(() -> numericNodeFactory.apply(0),
-            (key, value, acc) -> numericNodeFactory.apply(calculateHardQuantity(value) + acc.asInt()));
-    globalStock.toStream().to("global-stock");
+        .map(processor::stripMetadata)
+        .map(processor::deserialize);
+    KStream<List<Integer>, StockQuantity> warehouseStock =
+        stockStream
+            .groupByKey(
+                Serialized.with(
+                    JsonSerde.of(new TypeReference<List<Integer>>() {}), JsonSerde.of(StockState.class)))
+            .aggregate(
+                () -> StockQuantity.empty(LocalDateTime.MIN.atZone(ZoneOffset.UTC)),
+                processor::lastWriteWins,
+                Materialized.with(
+                    JsonSerde.of(new TypeReference<List<Integer>>() {}), JsonSerde.of(StockQuantity.class)))
+            .toStream();
+    warehouseStock.to(
+        "warehouse-stock",
+        Produced.with(
+            JsonSerde.of(new TypeReference<List<Integer>>() { }),
+            JsonSerde.of(StockQuantity.class)));
+    KTable<Integer, Integer> globalStock =
+        warehouseStock
+            .groupBy(
+                (warehouseItemPair, qty) -> warehouseItemPair.get(1),
+                Serialized.with(Serdes.Integer(), JsonSerde.of(StockQuantity.class) ))
+            .aggregate(
+                () -> 0,
+                (key, value, acc) -> value.hardQuantity() + acc,
+                Materialized.with(Serdes.Integer(), Serdes.Integer()));
+    globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
 
     var properties = StreamProperties.newDefaultStreamProperties(UUID.randomUUID().toString());
     Topology topology = builder.build();
@@ -49,22 +69,18 @@ public class StreamProcessor {
     Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
   }
 
-  private static int calculateHardQuantity(JsonNode qty) {
-    return qty.path("supply").asInt() - qty.path("demand").asInt() - qty.path("reserved").asInt();
+  private KeyValue<List<Integer>, StockState> deserialize(JsonNode idsArray, JsonNode value) {
+    var ids = SerializationUtils.deserialize(idsArray, new TypeReference<List<Integer>>() { });
+    var stockState = SerializationUtils.deserialize(value, DbStockState.class);
+    return new KeyValue<>(ids, stockState.toStockState());
   }
 
-  private JsonNode maxByLastUpdate(JsonNode node1, JsonNode node2) {
-    var mostRecentUpdate = getLastUpdate(node1).isAfter(getLastUpdate(node2))
-        ? node1.deepCopy() : node2.deepCopy();
-    ((ObjectNode) mostRecentUpdate).remove("warehouseid");
-    ((ObjectNode) mostRecentUpdate).remove("stockitemid");
-    return mostRecentUpdate;
-  }
-
-  private ZonedDateTime getLastUpdate(JsonNode node) {
-    long epochMilli = node.path("lastUpdate").asLong();
-    ZonedDateTime zonedDateTime = Instant.ofEpochMilli(epochMilli).atZone(ZoneOffset.UTC);
-    return zonedDateTime;
+  private StockQuantity lastWriteWins(List<Integer> ids, StockState state, StockQuantity acc) {
+    if (acc.getLastUpdate().isAfter(state.getLastUpdate())) {
+      return acc;
+    } else {
+      return StockQuantity.of(state);
+    }
   }
 
   private KeyValue<JsonNode, JsonNode> stripMetadata(JsonNode key, JsonNode value) {
