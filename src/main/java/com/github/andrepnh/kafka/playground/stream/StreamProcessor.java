@@ -3,9 +3,7 @@ package com.github.andrepnh.kafka.playground.stream;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.security.Key;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -17,8 +15,6 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
-import org.apache.kafka.streams.kstream.TimeWindows;
-import org.apache.kafka.streams.kstream.Windowed;
 
 public class StreamProcessor {
   public static void main(String[] args) {
@@ -30,15 +26,13 @@ public class StreamProcessor {
         .map(processor::stripMetadata);
     KStream<JsonNode, JsonNode> warehouseStock = stockStream
         .groupByKey()
-        .windowedBy(TimeWindows.of(2000))
         .reduce(processor::maxByLastUpdate)
-        .toStream()
-        .selectKey((window, value) -> window.key());
+        .toStream();
     warehouseStock.to("warehouse-stock");
     KTable<JsonNode, JsonNode> globalStock = warehouseStock
         .groupBy((warehouseItemPair, qty) -> warehouseItemPair.get(1))
         .aggregate(() -> numericNodeFactory.apply(0),
-            (key, value, acc) -> numericNodeFactory.apply(value.asInt() + acc.asInt()));
+            (key, value, acc) -> numericNodeFactory.apply(calculateHardQuantity(value) + acc.asInt()));
     globalStock.toStream().to("global-stock");
 
     var properties = StreamProperties.newDefaultStreamProperties(UUID.randomUUID().toString());
@@ -53,6 +47,10 @@ public class StreamProcessor {
     });
     streams.start();
     Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+  }
+
+  private static int calculateHardQuantity(JsonNode qty) {
+    return qty.path("supply").asInt() - qty.path("demand").asInt() - qty.path("reserved").asInt();
   }
 
   private JsonNode maxByLastUpdate(JsonNode node1, JsonNode node2) {
