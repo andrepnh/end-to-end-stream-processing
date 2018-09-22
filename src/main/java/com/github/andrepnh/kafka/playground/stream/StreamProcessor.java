@@ -23,11 +23,26 @@ import org.apache.kafka.streams.kstream.Serialized;
 public class StreamProcessor {
   public static void main(String[] args) {
     var processor = new StreamProcessor();
+    var topology = processor.buildTopology();
+    var properties = StreamProperties.newDefaultStreamProperties(UUID.randomUUID().toString());
+    System.out.println(topology.describe());
+    var streams = new KafkaStreams(topology, properties);
+    streams.cleanUp();
+    streams.setUncaughtExceptionHandler((thread, throwable) -> {
+      throwable.printStackTrace();
+      streams.close();
+      System.exit(1);
+    });
+    streams.start();
+    Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+  }
+
+  public Topology buildTopology() {
     var builder = new StreamsBuilder();
     KStream<List<Integer>, StockState> stockStream = builder
         .<JsonNode, JsonNode>stream("connect_test.public.stockstate")
-        .map(processor::stripMetadata)
-        .map(processor::deserialize);
+        .map(this::stripMetadata)
+        .map(this::deserialize);
     KStream<List<Integer>, StockQuantity> warehouseStock =
         stockStream
             .groupByKey(
@@ -35,7 +50,7 @@ public class StreamProcessor {
                     JsonSerde.of(new TypeReference<List<Integer>>() {}), JsonSerde.of(StockState.class)))
             .aggregate(
                 () -> StockQuantity.empty(LocalDateTime.MIN.atZone(ZoneOffset.UTC)),
-                processor::lastWriteWins,
+                this::lastWriteWins,
                 Materialized.with(
                     JsonSerde.of(new TypeReference<List<Integer>>() {}), JsonSerde.of(StockQuantity.class)))
             .toStream();
@@ -54,19 +69,7 @@ public class StreamProcessor {
                 (key, value, acc) -> value.hardQuantity() + acc,
                 Materialized.with(Serdes.Integer(), Serdes.Integer()));
     globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
-
-    var properties = StreamProperties.newDefaultStreamProperties(UUID.randomUUID().toString());
-    Topology topology = builder.build();
-    System.out.println(topology.describe());
-    var streams = new KafkaStreams(topology, properties);
-    streams.cleanUp();
-    streams.setUncaughtExceptionHandler((thread, throwable) -> {
-      throwable.printStackTrace();
-      streams.close();
-      System.exit(1);
-    });
-    streams.start();
-    Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+    return builder.build();
   }
 
   private KeyValue<List<Integer>, StockState> deserialize(JsonNode idsArray, JsonNode value) {

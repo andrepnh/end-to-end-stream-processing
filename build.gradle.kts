@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
@@ -16,8 +17,8 @@ repositories {
 val test by tasks.getting(Test::class) {
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).takeIf { it > 0 } ?: 1
     testLogging {
-        events(TestLogEvent.STARTED ,
-                TestLogEvent.FAILED, TestLogEvent.PASSED, TestLogEvent.STANDARD_OUT, TestLogEvent.STANDARD_ERROR)
+        exceptionFormat = TestExceptionFormat.FULL
+        events(TestLogEvent.STARTED, TestLogEvent.FAILED, TestLogEvent.PASSED)
     }
 }
 
@@ -40,6 +41,7 @@ dependencies {
 
     testCompile("junit", "junit", "4.12")
     testCompile("org.reflections", "reflections", "0.9.11")
+    testCompile("org.apache.kafka:kafka-streams-test-utils:2.0.0")
 }
 
 configure<JavaPluginConvention> {

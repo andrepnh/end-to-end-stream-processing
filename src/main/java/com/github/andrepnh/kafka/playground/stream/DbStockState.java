@@ -1,6 +1,8 @@
 package com.github.andrepnh.kafka.playground.stream;
 
 import com.github.andrepnh.kafka.playground.db.gen.StockState;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 
 public class DbStockState {
@@ -14,10 +16,10 @@ public class DbStockState {
 
   private final int reserved;
 
-  private final ZonedDateTime lastupdate;
+  private final long lastupdate;
 
   public DbStockState(int warehouseid, int stockitemid, int supply, int demand, int reserved,
-      ZonedDateTime lastupdate) {
+      long lastupdate) {
     this.warehouseid = warehouseid;
     this.stockitemid = stockitemid;
     this.supply = supply;
@@ -27,6 +29,7 @@ public class DbStockState {
   }
 
   public StockState toStockState() {
-    return new StockState(warehouseid, stockitemid, supply, demand, reserved, lastupdate);
+    return new StockState(warehouseid, stockitemid, supply, demand, reserved,
+        Instant.ofEpochMilli(lastupdate).atZone(ZoneOffset.UTC));
   }
 }

@@ -24,7 +24,8 @@ public class StockState {
     this.supply = supply;
     this.demand = demand;
     this.reserved = reserved;
-    this.lastUpdate = lastUpdate;
+    // Nanosecond precision is not available
+    this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC).withNano(0);
   }
 
   public static StockState random(int warehouseId, int stockItemId) {

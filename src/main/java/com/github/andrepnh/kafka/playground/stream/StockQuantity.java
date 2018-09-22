@@ -19,7 +19,7 @@ public class StockQuantity {
     this.supply = supply;
     this.demand = demand;
     this.reserved = reserved;
-    this.lastUpdate = lastUpdate;
+    this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC);
   }
 
   public static StockQuantity empty(ZonedDateTime when) {
