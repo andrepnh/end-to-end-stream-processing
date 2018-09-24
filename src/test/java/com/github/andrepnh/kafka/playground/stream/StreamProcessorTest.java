@@ -8,6 +8,7 @@ import com.github.andrepnh.kafka.playground.db.gen.StockState;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.MoreCollectors;
 import com.google.common.collect.Streams;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -30,53 +31,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-public class StreamProcessorTest {
-  private TopologyTestDriver driver;
-
-  private String stateDir;
-
-  @Before
-  public void setup() {
-    Properties properties = StreamTestProperties.newDefaultStreamProperties();
-    stateDir = properties.getProperty(StreamsConfig.STATE_DIR_CONFIG);
-    driver = new TopologyTestDriver(
-        new StreamProcessor().buildTopology(),
-        properties);
-  }
-
-  @After
-  public void teardown() {
-    driver.close();
-  }
-
-  @Test
-  public void shouldContinuouslyUpdateWarehouseCapacity() {
-    final Warehouse warehouse1 = new Warehouse(1, "one", 100, 50, 50),
-        warehouse2 = new Warehouse(2, "two", 200, 25 ,-25);
-
-    pipe(stockItem(warehouse1, 1, 0, 10));
-    pipe(warehouse1);
-    ProducerRecord<WarehouseKey, Allocation> record =
-        read("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class));
-    assertEquals(0.1, record.value().getHardAllocation(), 0.000001);
-    assertEquals(0.0, record.value().getSoftAllocation(), 0.000001);
-    pipe(stockItem(warehouse1, 1, 10, 0));
-    pipe(warehouse1); // Piping again the same value to trigger joins
-    record = read("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class));
-    assertEquals(0.1, record.value().getHardAllocation(), 0.000001);
-    assertEquals(0.1, record.value().getSoftAllocation(), 0.000001);
-
-    pipe(stockItem(warehouse2, 5, 100, 100));
-    pipe(warehouse2);
-    record = read("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class));
-    assertEquals(1, record.value().getHardAllocation(), 0.000001);
-    assertEquals(0.5, record.value().getSoftAllocation(), 0.000001);
-    pipe(stockItem(warehouse2, 333, 50, 50));
-    pipe(warehouse2);
-    record = read("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class));
-    assertEquals(0.5, record.value().getHardAllocation(), 0.000001);
-    assertEquals(0.25, record.value().getSoftAllocation(), 0.000001);
-  }
+public class StreamProcessorTest extends BaseStreamTest {
 
   @Test
   public void shouldProcessDbChangelogIntoWarehouseTopic() {
@@ -180,43 +135,6 @@ public class StreamProcessorTest {
     assertEquals(expectedHardQuantityByStockItem, hardQuantityByStockItem);
   }
 
-  private <K, V> ProducerRecord<K, V> readLast(String topic,
-      TypeReference<K> keyType, Class<V> valueType) {
-    return readStream(topic, JsonSerde.of(keyType), JsonSerde.of(valueType))
-        .sequential()
-        .reduce((acc, current) -> current)
-        .orElse(null);
-  }
-
-  private <K, V> ProducerRecord<K, V> readLast(String topic,
-      Serde<K> keySerde, Serde<V> valueSerde) {
-    return readStream(topic, keySerde, valueSerde)
-        .sequential()
-        .reduce((acc, current) -> current)
-        .orElse(null);
-  }
-
-  private <K, V> List<ProducerRecord<K, V>> readAll(String topic, TypeReference<K> keyType,
-      Class<V> valueType) {
-    return readStream(topic, JsonSerde.of(keyType), JsonSerde.of(valueType))
-        .collect(Collectors.toList());
-  }
-
-  private <K, V> List<ProducerRecord<K, V>> readAll(
-      String topic, Serde<K> keySerde, Serde<V> valueSerde) {
-    return readStream(topic, keySerde, valueSerde).collect(Collectors.toList());
-  }
-
-  private <K, V> Stream<ProducerRecord<K, V>> readStream(String topic, Serde<K> keySerde, Serde<V> valueSerde) {
-    return Stream
-        .generate(() -> read(topic, keySerde, valueSerde))
-        .takeWhile(Objects::nonNull);
-  }
-
-  private <K, V> ProducerRecord<K, V> read(String topic, Serde<K> keySerde, Serde<V> valueSerde) {
-    return driver.readOutput(topic, keySerde.deserializer(), valueSerde.deserializer());
-  }
-
   private void assertEqualsToRecord(List<StockState> states,
       List<ProducerRecord<List<Integer>, StockQuantity>> records) {
     assertEquals(states.size(), records.size());
@@ -242,31 +160,5 @@ public class StreamProcessorTest {
     assertEquals(state.getLastUpdate(), stockQuantity.getLastUpdate());
   }
 
-  private void pipe(Warehouse first, Warehouse... rest) {
-    var builder = new DebeziumJsonBuilder();
-    Lists.asList(first, rest).forEach(builder::add);
-    pipe("connect_test.public.warehouse", builder.build());
-  }
 
-  private void pipe(StockState first, StockState... rest) {
-    var builder = new DebeziumJsonBuilder();
-    Lists.asList(first, rest).forEach(builder::add);
-    pipe("connect_test.public.stockstate", builder.build());
-  }
-
-  private void pipe(String topic, List<KeyValue<JsonNode, JsonNode>> records) {
-    var factory = new ConsumerRecordFactory<>(topic,
-        new JsonNodeSerde().serializer(),
-        new JsonNodeSerde().serializer());
-    driver.pipeInput(factory.create(records));
-  }
-
-  private StockState stockItem(Warehouse warehouse, int id, int demand, int reserved) {
-    return new StockState(warehouse.getId(),
-        id,
-        100000, // Doesn't matter
-        demand,
-        reserved,
-        ZonedDateTime.now(ZoneOffset.UTC));
-  }
 }
