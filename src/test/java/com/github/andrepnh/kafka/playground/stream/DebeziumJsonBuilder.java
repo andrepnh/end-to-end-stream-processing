@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.andrepnh.kafka.playground.db.gen.StockState;
+import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.collect.ImmutableList;
 import org.apache.kafka.streams.KeyValue;
 
@@ -13,6 +14,35 @@ public class DebeziumJsonBuilder {
   public DebeziumJsonBuilder add(StockState stockState) {
     records.add(toKeyValue(stockState));
     return this;
+  }
+
+  public DebeziumJsonBuilder add(Warehouse warehouse) {
+    records.add(toKeyValue(warehouse));
+    return this;
+  }
+
+  public ImmutableList<KeyValue<JsonNode, JsonNode>> build() {
+    return records.build();
+  }
+
+  private KeyValue<JsonNode, JsonNode> toKeyValue(Warehouse warehouse) {
+    ObjectNode key = JsonNodeFactory.instance.objectNode(),
+        keyPayload = key.deepCopy();
+    keyPayload.set("id", JsonNodeFactory.instance.numberNode(warehouse.getId()));
+    key.set("payload", keyPayload);
+
+    ObjectNode value = JsonNodeFactory.instance.objectNode(),
+        valuePayload = value.deepCopy(),
+        valuePayloadAfter = value.deepCopy();
+    valuePayloadAfter.set("id", JsonNodeFactory.instance.numberNode(warehouse.getId()));
+    valuePayloadAfter.set("name", JsonNodeFactory.instance.textNode(warehouse.getName()));
+    valuePayloadAfter.set("latitude", JsonNodeFactory.instance.numberNode(warehouse.getLatitude()));
+    valuePayloadAfter.set("longitude", JsonNodeFactory.instance.numberNode(warehouse.getLongitude()));
+    valuePayloadAfter.set("storagecapacity", JsonNodeFactory.instance.numberNode(warehouse.getStorageCapacity()));
+    valuePayload.set("after", valuePayloadAfter);
+    value.set("payload", valuePayload);
+
+    return new KeyValue<>(key, value);
   }
 
   private KeyValue<JsonNode, JsonNode> toKeyValue(StockState stockState) {
@@ -37,7 +67,5 @@ public class DebeziumJsonBuilder {
     return new KeyValue<>(key, value);
   }
 
-  public ImmutableList<KeyValue<JsonNode, JsonNode>> build() {
-    return records.build();
-  }
+
 }

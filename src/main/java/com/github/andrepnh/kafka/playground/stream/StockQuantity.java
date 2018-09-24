@@ -30,6 +30,22 @@ public class StockQuantity {
     return new StockQuantity(state.getSupply(), state.getDemand(), state.getReserved(), state.getLastUpdate());
   }
 
+  public StockQuantity sum(StockQuantity other) {
+    return new StockQuantity(
+        this.supply + other.supply,
+        this.demand + other.demand,
+        this.reserved + other.reserved,
+        this.lastUpdate.isAfter(other.lastUpdate) ? this.lastUpdate : other.lastUpdate);
+  }
+
+  public int hardDemand() {
+    return demand + reserved;
+  }
+
+  public int softDemand() {
+    return demand;
+  }
+
   public int hardQuantity() {
     return supply - demand - reserved;
   }
