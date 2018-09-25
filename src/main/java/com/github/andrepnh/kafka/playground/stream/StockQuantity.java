@@ -38,6 +38,14 @@ public class StockQuantity {
         this.lastUpdate.isAfter(other.lastUpdate) ? this.lastUpdate : other.lastUpdate);
   }
 
+  public StockQuantity subtract(StockQuantity other) {
+    return new StockQuantity(
+        this.supply - other.supply,
+        this.demand - other.demand,
+        this.reserved - other.reserved,
+        this.lastUpdate);
+  }
+
   public int hardDemand() {
     return demand + reserved;
   }

@@ -48,21 +48,20 @@ public class StreamProcessor {
         .<JsonNode, JsonNode>stream("connect_test.public.stockstate")
         .map(this::stripStockStateMetadata)
         .map(this::deserializeStockState);
-    KStream<List<Integer>, StockQuantity> warehouseStock =
+    KTable<List<Integer>, StockQuantity> warehouseStock =
         stockStream
             .groupByKey(
                 Serialized.with(
-                    JsonSerde.of(new TypeReference<List<Integer>>() {}), JsonSerde.of(StockState.class)))
+                    JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(StockState.class)))
             .aggregate(
                 () -> StockQuantity.empty(LocalDateTime.MIN.atZone(ZoneOffset.UTC)),
                 this::lastWriteWins,
                 Materialized.with(
-                    JsonSerde.of(new TypeReference<List<Integer>>() {}), JsonSerde.of(StockQuantity.class)))
-            .toStream();
-    warehouseStock.to(
+                    JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(StockQuantity.class)));
+    warehouseStock.toStream().to(
         "warehouse-stock",
         Produced.with(
-            JsonSerde.of(new TypeReference<List<Integer>>() { }),
+            JsonSerde.of(new TypeReference<>() { }),
             JsonSerde.of(StockQuantity.class)));
 
     KStream<Integer, Warehouse> warehouseStream = builder
@@ -70,9 +69,9 @@ public class StreamProcessor {
         .map(this::stripWarehouseMetadata)
         .map(this::deserializeWarehouse);
     KTable<Integer, StockQuantity> warehouseQuantityTable = warehouseStock
-        .map((warehouseItemPair, quantity) -> new KeyValue<>(warehouseItemPair.get(0), quantity))
-        .groupByKey(Serialized.with(Serdes.Integer(), JsonSerde.of(StockQuantity.class)))
-        .reduce(this::lastWriteWins);
+        .groupBy((key, value) -> new KeyValue<>(key.get(0), value),
+            Serialized.with(Serdes.Integer(), JsonSerde.of(StockQuantity.class)))
+        .reduce(StockQuantity::sum, StockQuantity::subtract);
     KStream<WarehouseKey, Allocation> warehouseCapacity = warehouseStream
         .join(warehouseQuantityTable,
             WarehouseStockQuantity::new,
@@ -97,11 +96,12 @@ public class StreamProcessor {
     KTable<Integer, Integer> globalStock =
         warehouseStock
             .groupBy(
-                (warehouseItemPair, qty) -> warehouseItemPair.get(1),
+                (warehouseItemPair, qty) -> new KeyValue<>(warehouseItemPair.get(1), qty),
                 Serialized.with(Serdes.Integer(), JsonSerde.of(StockQuantity.class) ))
             .aggregate(
                 () -> 0,
                 (key, value, acc) -> value.hardQuantity() + acc,
+                (key, value, acc) -> acc - value.hardQuantity(),
                 Materialized.with(Serdes.Integer(), Serdes.Integer()));
     globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
     return builder.build();
