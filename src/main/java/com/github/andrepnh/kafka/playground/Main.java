@@ -2,14 +2,12 @@ package com.github.andrepnh.kafka.playground;
 
 import com.github.andrepnh.kafka.playground.db.gen.StockItem;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
-import com.github.andrepnh.kafka.playground.db.gen.StockState;
+import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import com.google.common.collect.Tables;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -26,10 +24,10 @@ public class Main {
       "INSERT INTO StockItem(id, description) VALUES (?, ?) ON CONFLICT DO NOTHING";
 
   private static final String INSERT_STOCK =
-      "INSERT INTO StockState (warehouseId, stockItemId, supply, demand, reserved, lastUpdate) "
-    + "VALUES (?, ?, ?, ?, ?, ?) "
+      "INSERT INTO StockQuantity (warehouseId, stockItemId, quantity, lastUpdate) "
+    + "VALUES (?, ?, ?, ?) "
     + "ON CONFLICT (warehouseId, stockItemId) DO "
-    + "UPDATE SET supply = ?, demand = ?, reserved = ?, lastUpdate = ?";
+    + "UPDATE SET quantity = ?, lastUpdate = ?";
 
   public static void main(String[] args) {
     var maxWarehouses = getProperty("max.warehouses", 300, Integer::parseInt);
@@ -41,7 +39,7 @@ public class Main {
         .generate(() -> {
           var warehouse = Warehouse.random(maxWarehouses);
           var item = StockItem.random(maxItems);
-          return Tables.immutableCell(warehouse, item, StockState.random(warehouse.getId(), item.getId()));
+          return Tables.immutableCell(warehouse, item, StockQuantity.random(warehouse.getId(), item.getId()));
         })
         .parallel()
         .limit(stocks)
@@ -55,7 +53,7 @@ public class Main {
         .forEach(triple -> {
           Warehouse warehouse = triple.getRowKey();
           StockItem item = triple.getColumnKey();
-          StockState stock = triple.getValue();
+          StockQuantity stock = triple.getValue();
           insert(warehouse, dbConnectionSupplier);
           insert(item, dbConnectionSupplier);
           insert(stock, dbConnectionSupplier);
@@ -104,18 +102,14 @@ public class Main {
     }
   }
 
-  private static void insert(StockState stock, Supplier<Connection> connectionSupplier) {
+  private static void insert(StockQuantity stock, Supplier<Connection> connectionSupplier) {
     try (var preparedStatement = connectionSupplier.get().prepareStatement(INSERT_STOCK)) {
       preparedStatement.setInt(1, stock.getWarehouseId());
       preparedStatement.setInt(2, stock.getStockItemId());
-      preparedStatement.setInt(3, stock.getSupply());
-      preparedStatement.setInt(4, stock.getDemand());
-      preparedStatement.setInt(5, stock.getReserved());
+      preparedStatement.setInt(3, stock.getQuantity());
+      preparedStatement.setTimestamp(4, new Timestamp(stock.getLastUpdate().toInstant().toEpochMilli()));
+      preparedStatement.setInt(5, stock.getQuantity());
       preparedStatement.setTimestamp(6, new Timestamp(stock.getLastUpdate().toInstant().toEpochMilli()));
-      preparedStatement.setInt(7, stock.getSupply());
-      preparedStatement.setInt(8, stock.getDemand());
-      preparedStatement.setInt(9, stock.getReserved());
-      preparedStatement.setTimestamp(10, new Timestamp(stock.getLastUpdate().toInstant().toEpochMilli()));
       preparedStatement.execute();
     } catch (SQLException ex) {
       throw new IllegalStateException(ex);

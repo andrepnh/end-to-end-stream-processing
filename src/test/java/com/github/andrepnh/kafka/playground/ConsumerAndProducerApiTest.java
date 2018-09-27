@@ -22,7 +22,7 @@ import static org.junit.Assert.assertEquals;
 
 public class ConsumerAndProducerApiTest {
 
-  @Test
+//  @Test
   public void singleProducerAndConsumer() throws ExecutionException, InterruptedException {
     final String topic = TopicCreator.uniqueTopicName("simple-consumer-producer");
     var producerProps = ProducerFacade.newDefaultProducerProperties().build();
@@ -64,7 +64,7 @@ public class ConsumerAndProducerApiTest {
     }
   }
 
-  @Test
+//  @Test
   public void multipleConsumersInASingleGroup() {
     final var topic = TopicCreator.create(
         "multiple-consumers-single-group", ClusterProperties.BROKERS);
@@ -80,7 +80,7 @@ public class ConsumerAndProducerApiTest {
     printRecordsConsumedCount(results);
   }
 
-  @Test
+//  @Test
   public void singleConsumerPerGroupAndMultipleGroups() {
     final var topic = TopicCreator.create(
         "single-consumer-in-multiple-groups", ClusterProperties.BROKERS);
@@ -103,7 +103,7 @@ public class ConsumerAndProducerApiTest {
     printRecordsConsumedCountGroupedByGroup(resultsByGroup);
   }
 
-  @Test
+//  @Test
   public void recordsAreBalancedOnlyUpToAsManyConsumersAsPartitions() {
     final var topic = TopicCreator.create("more-consumers-than-partitions", 2);
     final int records = 1000, consumerQty = topic.getPartitions() + 10;

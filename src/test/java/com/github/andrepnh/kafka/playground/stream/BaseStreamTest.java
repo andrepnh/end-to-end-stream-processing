@@ -2,7 +2,7 @@ package com.github.andrepnh.kafka.playground.stream;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.github.andrepnh.kafka.playground.db.gen.StockState;
+import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.collect.Lists;
 import java.time.ZoneOffset;
@@ -79,7 +79,7 @@ public class BaseStreamTest {
     pipe("connect_test.public.warehouse", builder.build());
   }
 
-  protected void pipe(StockState first, StockState... rest) {
+  protected void pipe(StockQuantity first, StockQuantity... rest) {
     var builder = new DebeziumJsonBuilder();
     Lists.asList(first, rest).forEach(builder::add);
     pipe("connect_test.public.stockstate", builder.build());
@@ -92,16 +92,10 @@ public class BaseStreamTest {
     driver.pipeInput(factory.create(records));
   }
 
-  protected StockState stockItem(Warehouse warehouse, int id, int demand) {
-    return stockItem(warehouse, id, demand, 0);
-  }
-
-  protected StockState stockItem(Warehouse warehouse, int id, int demand, int reserved) {
-    return new StockState(warehouse.getId(),
+  protected StockQuantity stockQuantity(Warehouse warehouse, int id, int quantity) {
+    return new StockQuantity(warehouse.getId(),
         id,
-        100000, // Doesn't matter
-        demand,
-        reserved,
+        quantity,
         ZonedDateTime.now(ZoneOffset.UTC));
   }
 }

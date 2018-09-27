@@ -4,10 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.github.andrepnh.kafka.playground.db.gen.StockState;
+import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Lists;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -44,40 +43,40 @@ public class StreamProcessor {
 
   public Topology buildTopology() {
     var builder = new StreamsBuilder();
-    KStream<List<Integer>, StockState> stockStream = builder
+    KStream<List<Integer>, StockQuantity> stockStream = builder
         .<JsonNode, JsonNode>stream("connect_test.public.stockstate")
         .map(this::stripStockStateMetadata)
         .map(this::deserializeStockState);
-    KTable<List<Integer>, StockQuantity> warehouseStock =
+    KTable<List<Integer>, Quantity> warehouseStock =
         stockStream
             .groupByKey(
                 Serialized.with(
-                    JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(StockState.class)))
+                    JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(StockQuantity.class)))
             .aggregate(
-                () -> StockQuantity.empty(LocalDateTime.MIN.atZone(ZoneOffset.UTC)),
+                () -> Quantity.empty(LocalDateTime.MIN.atZone(ZoneOffset.UTC)),
                 this::lastWriteWins,
                 Materialized.with(
-                    JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(StockQuantity.class)));
+                    JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(Quantity.class)));
     warehouseStock.toStream().to(
         "warehouse-stock",
         Produced.with(
             JsonSerde.of(new TypeReference<>() { }),
-            JsonSerde.of(StockQuantity.class)));
+            JsonSerde.of(Quantity.class)));
 
     KStream<Integer, Warehouse> warehouseStream = builder
         .<JsonNode, JsonNode>stream("connect_test.public.warehouse")
         .map(this::stripWarehouseMetadata)
         .map(this::deserializeWarehouse);
-    KTable<Integer, StockQuantity> warehouseQuantityTable = warehouseStock
+    KTable<Integer, Quantity> warehouseQuantityTable = warehouseStock
         .groupBy((key, value) -> new KeyValue<>(key.get(0), value),
-            Serialized.with(Serdes.Integer(), JsonSerde.of(StockQuantity.class)))
-        .reduce(StockQuantity::sum, StockQuantity::subtract);
+            Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
+        .reduce(Quantity::sum, Quantity::subtract);
     KStream<WarehouseKey, Allocation> warehouseCapacity = warehouseStream
         .join(warehouseQuantityTable,
             WarehouseStockQuantity::new,
             Joined.with(Serdes.Integer(),
                 JsonSerde.of(Warehouse.class),
-                JsonSerde.of(StockQuantity.class)))
+                JsonSerde.of(Quantity.class)))
         .map((id, warehouseStockQuantity) -> {
           var warehouse = warehouseStockQuantity.getWarehouse();
           var qty = warehouseStockQuantity.getStockQuantity();
@@ -85,9 +84,7 @@ public class StreamProcessor {
               warehouse.getName(),
               warehouse.getLatitude(),
               warehouse.getLongitude());
-          var allocation = new Allocation(
-              (double) qty.softDemand() / warehouse.getStorageCapacity(),
-              (double) qty.hardDemand() / warehouse.getStorageCapacity());
+          var allocation = Allocation.calculate(qty.getQuantity(), warehouse.getStorageCapacity());
           return new KeyValue<>(key, allocation);
         });
     warehouseCapacity.to("warehouse-capacity",
@@ -97,11 +94,11 @@ public class StreamProcessor {
         warehouseStock
             .groupBy(
                 (warehouseItemPair, qty) -> new KeyValue<>(warehouseItemPair.get(1), qty),
-                Serialized.with(Serdes.Integer(), JsonSerde.of(StockQuantity.class) ))
+                Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class) ))
             .aggregate(
                 () -> 0,
-                (key, value, acc) -> value.hardQuantity() + acc,
-                (key, value, acc) -> acc - value.hardQuantity(),
+                (key, value, acc) -> value.getQuantity() + acc,
+                (key, value, acc) -> acc - value.getQuantity(),
                 Materialized.with(Serdes.Integer(), Serdes.Integer()));
     globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
     return builder.build();
@@ -113,7 +110,7 @@ public class StreamProcessor {
     return new KeyValue<>(id, currentState);
   }
 
-  private KeyValue<List<Integer>, StockState> deserializeStockState(JsonNode idsArray, JsonNode value) {
+  private KeyValue<List<Integer>, StockQuantity> deserializeStockState(JsonNode idsArray, JsonNode value) {
     var ids = SerializationUtils.deserialize(idsArray, new TypeReference<List<Integer>>() { });
     var stockState = SerializationUtils.deserialize(value, DbStockState.class);
     return new KeyValue<>(ids, stockState.toStockState());
@@ -125,19 +122,19 @@ public class StreamProcessor {
     return new KeyValue<>(id, dbWarehouse.toWarehouse());
   }
 
-  private StockQuantity lastWriteWins(List<Integer> ids, StockState state, StockQuantity acc) {
+  private Quantity lastWriteWins(List<Integer> ids, StockQuantity state, Quantity acc) {
     if (acc.getLastUpdate().isAfter(state.getLastUpdate())) {
       return acc;
     } else {
-      return StockQuantity.of(state);
+      return Quantity.of(state);
     }
   }
 
-  private StockQuantity lastWriteWins(StockQuantity stockQuantity1, StockQuantity stockQuantity2) {
-    if (stockQuantity1.getLastUpdate().isAfter(stockQuantity2.getLastUpdate())) {
+  private Quantity lastWriteWins(Quantity stockQuantity1, Quantity quantity) {
+    if (stockQuantity1.getLastUpdate().isAfter(quantity.getLastUpdate())) {
       return stockQuantity1;
     } else {
-      return stockQuantity2;
+      return quantity;
     }
   }
 
@@ -152,10 +149,10 @@ public class StreamProcessor {
   private static class WarehouseStockQuantity {
     private final Warehouse warehouse;
 
-    private final StockQuantity stockQuantity;
+    private final Quantity stockQuantity;
 
     public WarehouseStockQuantity(Warehouse warehouse,
-        StockQuantity stockQuantity) {
+        Quantity stockQuantity) {
       this.warehouse = warehouse;
       this.stockQuantity = stockQuantity;
     }
@@ -190,7 +187,7 @@ public class StreamProcessor {
       return warehouse;
     }
 
-    public StockQuantity getStockQuantity() {
+    public Quantity getStockQuantity() {
       return stockQuantity;
     }
   }
