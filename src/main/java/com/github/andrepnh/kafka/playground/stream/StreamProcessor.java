@@ -7,17 +7,21 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Lists;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.Joined;
+import org.apache.kafka.streams.kstream.KGroupedTable;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
@@ -44,7 +48,7 @@ public class StreamProcessor {
   public Topology buildTopology() {
     var builder = new StreamsBuilder();
     KStream<List<Integer>, StockQuantity> stockStream = builder
-        .<JsonNode, JsonNode>stream("connect_test.public.stockstate")
+        .<JsonNode, JsonNode>stream("connect_test.public.stockquantity")
         .map(this::stripStockStateMetadata)
         .map(this::deserializeStockState);
     KTable<List<Integer>, Quantity> warehouseStock =
@@ -101,6 +105,23 @@ public class StreamProcessor {
                 (key, value, acc) -> acc - value.getQuantity(),
                 Materialized.with(Serdes.Integer(), Serdes.Integer()));
     globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
+
+    KGroupedTable<Integer, Integer> globalChanges = globalStock.groupBy(KeyValue::new);
+    KTable<Integer, List<Integer>> globalStockMinMax = globalChanges
+        .aggregate(() -> Lists.newArrayList(Integer.MAX_VALUE, Integer.MIN_VALUE),
+            (key, value, acc) -> {
+              int min = acc.get(0), max = acc.get(1);
+              if (value < min) {
+                min = value;
+              }
+              if (value > max) {
+                max = value;
+              }
+              return Lists.newArrayList(min, max);
+            }, (key, value, acc) -> acc, // No need to revert, we want historical min and max
+            Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<List<Integer>>() {
+            })));
+
     return builder.build();
   }
 

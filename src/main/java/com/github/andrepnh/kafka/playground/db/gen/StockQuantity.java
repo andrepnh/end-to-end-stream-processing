@@ -26,7 +26,7 @@ public class StockQuantity {
     return new StockQuantity(
         warehouseId,
         stockItemId,
-        Generator.positive(2000),
+        Generator.rangeClosed(-100, 125),
         ZonedDateTime.now(ZoneOffset.UTC));
   }
 
