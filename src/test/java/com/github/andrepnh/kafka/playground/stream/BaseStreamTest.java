@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.collect.Lists;
+import com.google.common.collect.MoreCollectors;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -52,6 +53,13 @@ public class BaseStreamTest {
         .orElse(null);
   }
 
+  protected <K, V> ProducerRecord<K, V> readSingle(String topic,
+      Serde<K> keySerde, Serde<V> valueSerde) {
+    return readStream(topic, keySerde, valueSerde)
+        .sequential()
+        .collect(MoreCollectors.onlyElement());
+  }
+
   protected <K, V> List<ProducerRecord<K, V>> readAll(String topic, TypeReference<K> keyType,
       Class<V> valueType) {
     return readStream(topic, JsonSerde.of(keyType), JsonSerde.of(valueType))
@@ -82,7 +90,7 @@ public class BaseStreamTest {
   protected void pipe(StockQuantity first, StockQuantity... rest) {
     var builder = new DebeziumJsonBuilder();
     Lists.asList(first, rest).forEach(builder::add);
-    pipe("connect_test.public.stockstate", builder.build());
+    pipe("connect_test.public.stockquantity", builder.build());
   }
 
   protected void pipe(String topic, List<KeyValue<JsonNode, JsonNode>> records) {

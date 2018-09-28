@@ -106,8 +106,8 @@ public class StreamProcessor {
                 Materialized.with(Serdes.Integer(), Serdes.Integer()));
     globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
 
-    KGroupedTable<Integer, Integer> globalChanges = globalStock.groupBy(KeyValue::new);
-    KTable<Integer, List<Integer>> globalStockMinMax = globalChanges
+    KTable<Integer, List<Integer>> globalStockMinMax = globalStock
+        .groupBy(KeyValue::new)
         .aggregate(() -> Lists.newArrayList(Integer.MAX_VALUE, Integer.MIN_VALUE),
             (key, value, acc) -> {
               int min = acc.get(0), max = acc.get(1);
@@ -119,8 +119,14 @@ public class StreamProcessor {
               }
               return Lists.newArrayList(min, max);
             }, (key, value, acc) -> acc, // No need to revert, we want historical min and max
-            Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<List<Integer>>() {
-            })));
+            Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
+    KTable<Integer, Double> globalStockPercentagePerItem = globalStock.join(globalStockMinMax, (quantity, minMax) -> {
+      int min = minMax.get(0), max = minMax.get(1);
+      int offset = quantity - min, maxOffset = max - min;
+      return (double) offset / maxOffset;
+    });
+    globalStockPercentagePerItem.toStream().to("global-stock-percentage",
+        Produced.with(Serdes.Integer(), Serdes.Double()));
 
     return builder.build();
   }
