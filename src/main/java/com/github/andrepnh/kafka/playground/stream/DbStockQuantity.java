@@ -4,7 +4,7 @@ import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
-public class DbStockState {
+public class DbStockQuantity {
   private final int warehouseid;
 
   private final int stockitemid;
@@ -13,14 +13,14 @@ public class DbStockState {
 
   private final long lastupdate;
 
-  public DbStockState(int warehouseid, int stockitemid, int quantity, long lastupdate) {
+  public DbStockQuantity(int warehouseid, int stockitemid, int quantity, long lastupdate) {
     this.warehouseid = warehouseid;
     this.stockitemid = stockitemid;
     this.quantity = quantity;
     this.lastupdate = lastupdate;
   }
 
-  public StockQuantity toStockState() {
+  public StockQuantity toStockQuantity() {
     return new StockQuantity(warehouseid, stockitemid, quantity,
         Instant.ofEpochMilli(lastupdate).atZone(ZoneOffset.UTC));
   }

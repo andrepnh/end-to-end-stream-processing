@@ -10,18 +10,15 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Function;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.Joined;
-import org.apache.kafka.streams.kstream.KGroupedTable;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
@@ -49,8 +46,8 @@ public class StreamProcessor {
     var builder = new StreamsBuilder();
     KStream<List<Integer>, StockQuantity> stockStream = builder
         .<JsonNode, JsonNode>stream("connect_test.public.stockquantity")
-        .map(this::stripStockStateMetadata)
-        .map(this::deserializeStockState);
+        .map(this::stripStockQuantityMetadata)
+        .map(this::deserializeStockQuantity);
     KTable<List<Integer>, Quantity> warehouseStock =
         stockStream
             .groupByKey(
@@ -137,10 +134,10 @@ public class StreamProcessor {
     return new KeyValue<>(id, currentState);
   }
 
-  private KeyValue<List<Integer>, StockQuantity> deserializeStockState(JsonNode idsArray, JsonNode value) {
+  private KeyValue<List<Integer>, StockQuantity> deserializeStockQuantity(JsonNode idsArray, JsonNode value) {
     var ids = SerializationUtils.deserialize(idsArray, new TypeReference<List<Integer>>() { });
-    var stockState = SerializationUtils.deserialize(value, DbStockState.class);
-    return new KeyValue<>(ids, stockState.toStockState());
+    var dbStockQuantity = SerializationUtils.deserialize(value, DbStockQuantity.class);
+    return new KeyValue<>(ids, dbStockQuantity.toStockQuantity());
   }
 
   private KeyValue<Integer, Warehouse> deserializeWarehouse(JsonNode jsonId, JsonNode jsonWarehouse) {
@@ -165,7 +162,7 @@ public class StreamProcessor {
     }
   }
 
-  private KeyValue<JsonNode, JsonNode> stripStockStateMetadata(JsonNode key, JsonNode value) {
+  private KeyValue<JsonNode, JsonNode> stripStockQuantityMetadata(JsonNode key, JsonNode value) {
     var currentState = value.at("/payload/after");
     ArrayNode ids = JsonNodeFactory.instance.arrayNode(2);
     ids.add(key.at("/payload/warehouseid"));

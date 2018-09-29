@@ -26,7 +26,7 @@ public class StreamProcessorTest extends BaseStreamTest {
   @Test
   public void shouldProcessDbChangelogIntoWarehouseTopic() {
     var factory = new ConsumerRecordFactory<>(
-        "connect_test.public.stockstate",
+        "connect_test.public.stockquantity",
         new JsonNodeSerde().serializer(),
         new JsonNodeSerde().serializer());
     var state = new StockQuantity(1, 3, 10,
@@ -46,7 +46,7 @@ public class StreamProcessorTest extends BaseStreamTest {
   @Test
   public void shouldUpdateWarehouseTopicWithNewerDbUpdates() {
     var factory = new ConsumerRecordFactory<>(
-        "connect_test.public.stockstate",
+        "connect_test.public.stockquantity",
         new JsonNodeSerde().serializer(),
         new JsonNodeSerde().serializer());
     var initial = new StockQuantity(1, 1, 10,
