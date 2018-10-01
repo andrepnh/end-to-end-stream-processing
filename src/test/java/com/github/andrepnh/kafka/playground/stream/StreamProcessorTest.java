@@ -95,36 +95,6 @@ public class StreamProcessorTest extends BaseStreamTest {
         records);
   }
 
-  @Test
-  public void shouldAggregateStockFromAllWarehousesToGlobal() {
-    var stock1Warehouse1 = new StockQuantity(1, 1, 10,
-        ZonedDateTime.now(ZoneOffset.UTC).minusSeconds(10));
-    var stock1Warehouse2 = new StockQuantity(2, 1, 3,
-        ZonedDateTime.now(ZoneOffset.UTC).minusSeconds(5));
-    var stock2Warehouse2 = new StockQuantity(2, 2, 7,
-        ZonedDateTime.now(ZoneOffset.UTC).minusSeconds(17));
-    var stock2Warehouse3 = new StockQuantity(3, 2, 1,
-        ZonedDateTime.now(ZoneOffset.UTC).plusSeconds(5));
-    pipe(stock1Warehouse1, stock1Warehouse2, stock2Warehouse2, stock2Warehouse3);
-
-    List<ProducerRecord<Integer, Integer>> records = readAll(
-        "global-stock", Serdes.Integer(), Serdes.Integer());
-
-    Map<Integer, Integer> expectedQuantityByStockItem = Lists
-        .newArrayList(stock1Warehouse1, stock1Warehouse2, stock2Warehouse2, stock2Warehouse3)
-        .stream()
-        .collect(Collectors.groupingBy(
-            StockQuantity::getStockItemId,
-            Collectors.summingInt(state -> Quantity.of(state).getQuantity())));
-
-    Map<Integer, Integer> quantityByStockItem = records.stream()
-        .collect(Collectors.groupingBy(
-            ProducerRecord::key,
-            Collectors.reducing(0, ProducerRecord::value, (acc, curr) -> curr)));
-
-    assertEquals(expectedQuantityByStockItem, quantityByStockItem);
-  }
-
   private void assertEqualsToRecord(List<StockQuantity> states,
       List<ProducerRecord<List<Integer>, Quantity>> records) {
     assertEquals(states.size(), records.size());

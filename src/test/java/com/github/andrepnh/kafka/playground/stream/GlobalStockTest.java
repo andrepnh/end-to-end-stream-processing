@@ -37,7 +37,7 @@ public class GlobalStockTest extends BaseStreamTest {
     ProducerRecord<Integer, Integer> record =
         readLast("global-stock", Serdes.Integer(), Serdes.Integer());
     assertEquals(item, (int) record.key());
-    assertEquals(originalQuantity, (int) record.value());
+    assertEquals(updatedQuantity, (int) record.value());
   }
 
   @Test
@@ -49,7 +49,7 @@ public class GlobalStockTest extends BaseStreamTest {
         stockQuantity(warehouse2, item, warehouse2Quantity));
     pipe(warehouse1, warehouse2);
     ProducerRecord<Integer, Integer> record =
-        readSingle("global-stock", Serdes.Integer(), Serdes.Integer());
+        readLast("global-stock", Serdes.Integer(), Serdes.Integer());
     assertEquals(item, (int) record.key());
     assertEquals(warehouse1Quantity + warehouse2Quantity, (int) record.value());
   }

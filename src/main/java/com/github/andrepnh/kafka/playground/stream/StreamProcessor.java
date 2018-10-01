@@ -10,6 +10,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -18,6 +19,7 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Joined;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
@@ -58,7 +60,8 @@ public class StreamProcessor {
                 this::lastWriteWins,
                 Materialized.with(
                     JsonSerde.of(new TypeReference<>() {}), JsonSerde.of(Quantity.class)));
-    warehouseStock.toStream().to(
+    var warehouseStockStream = warehouseStock.toStream();
+    warehouseStockStream.to(
         "warehouse-stock",
         Produced.with(
             JsonSerde.of(new TypeReference<>() { }),
@@ -91,20 +94,22 @@ public class StreamProcessor {
     warehouseCapacity.to("warehouse-capacity",
         Produced.with(JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class)));
 
+
     KTable<Integer, Integer> globalStock =
         warehouseStock
             .groupBy(
                 (warehouseItemPair, qty) -> new KeyValue<>(warehouseItemPair.get(1), qty),
-                Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class) ))
+                Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
             .aggregate(
                 () -> 0,
                 (key, value, acc) -> value.getQuantity() + acc,
                 (key, value, acc) -> acc - value.getQuantity(),
                 Materialized.with(Serdes.Integer(), Serdes.Integer()));
-    globalStock.toStream().to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
+    var globalStockStream = globalStock.toStream();
+    globalStockStream.to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
 
-    KTable<Integer, List<Integer>> globalStockMinMax = globalStock
-        .groupBy(KeyValue::new)
+    KTable<Integer, List<Integer>> globalStockMinMax = globalStockStream
+        .groupByKey()
         .aggregate(() -> Lists.newArrayList(Integer.MAX_VALUE, Integer.MIN_VALUE),
             (key, value, acc) -> {
               int min = acc.get(0), max = acc.get(1);
@@ -115,14 +120,14 @@ public class StreamProcessor {
                 max = value;
               }
               return Lists.newArrayList(min, max);
-            }, (key, value, acc) -> acc, // No need to revert, we want historical min and max
-            Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
-    KTable<Integer, Double> globalStockPercentagePerItem = globalStock.join(globalStockMinMax, (quantity, minMax) -> {
-      int min = minMax.get(0), max = minMax.get(1);
-      int offset = quantity - min, maxOffset = max - min;
-      return (double) offset / maxOffset;
-    });
-    globalStockPercentagePerItem.toStream().to("global-stock-percentage",
+            }, Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
+    KStream<Integer, Double> globalStockPercentagePerItem = globalStockStream
+        .join(globalStockMinMax, (quantity, minMax) -> {
+          int min = minMax.get(0), max = minMax.get(1);
+          int offset = quantity - min, maxOffset = max - min;
+          return (double) offset / maxOffset;
+        }, Joined.with(Serdes.Integer(), Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
+    globalStockPercentagePerItem.to("global-stock-percentage",
         Produced.with(Serdes.Integer(), Serdes.Double()));
 
     return builder.build();
