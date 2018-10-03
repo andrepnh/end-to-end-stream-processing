@@ -10,7 +10,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -19,7 +18,6 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Joined;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
@@ -95,38 +93,48 @@ public class StreamProcessor {
         Produced.with(JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class)));
 
 
-    KTable<Integer, Integer> globalStock =
+    KTable<Integer, GlobalStockQuantity> metaGlobalStock =
         warehouseStock
             .groupBy(
                 (warehouseItemPair, qty) -> new KeyValue<>(warehouseItemPair.get(1), qty),
                 Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
             .aggregate(
-                () -> 0,
-                (key, value, acc) -> value.getQuantity() + acc,
-                (key, value, acc) -> acc - value.getQuantity(),
-                Materialized.with(Serdes.Integer(), Serdes.Integer()));
-    var globalStockStream = globalStock.toStream();
+                GlobalStockQuantity::zero,
+                (key, value, acc) -> acc.add(value.getQuantity()),
+                (key, value, acc) -> acc.subtract(value.getQuantity()),
+                Materialized.with(Serdes.Integer(), JsonSerde.of(GlobalStockQuantity.class)));
+    var metaGlobalStockStream = metaGlobalStock.toStream();
+    KStream<Integer, Integer> globalStockStream = metaGlobalStockStream
+        .mapValues(GlobalStockQuantity::getQuantity);
     globalStockStream.to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
 
-    KTable<Integer, List<Integer>> globalStockMinMax = globalStockStream
+    KTable<Integer, List<Integer>> globalStockMinMax = metaGlobalStockStream
         .groupByKey()
         .aggregate(() -> Lists.newArrayList(Integer.MAX_VALUE, Integer.MIN_VALUE),
             (key, value, acc) -> {
               int min = acc.get(0), max = acc.get(1);
-              if (value < min) {
-                min = value;
+              if (value.isSubtractorUpdate()) {
+                // We ignore updates coming from subtractors because they can drop min to 0.
+                // Suppose the min is currently 200 and global is updated to 100. That will trigger
+                // its subtractor dropping the value to 0 and the actual update won't be reflected.
+                return Lists.newArrayList(min, max);
               }
-              if (value > max) {
-                max = value;
+              if (value.getQuantity() < min) {
+                min = value.getQuantity();
+              }
+              if (value.getQuantity() > max) {
+                max = value.getQuantity();
               }
               return Lists.newArrayList(min, max);
             }, Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
-    KStream<Integer, Double> globalStockPercentagePerItem = globalStockStream
-        .join(globalStockMinMax, (quantity, minMax) -> {
+    KStream<Integer, Double> globalStockPercentagePerItem = metaGlobalStockStream
+        .join(globalStockMinMax, (global, minMax) -> {
           int min = minMax.get(0), max = minMax.get(1);
-          int offset = quantity - min, maxOffset = max - min;
+          int offset = global.getQuantity() - min, maxOffset = max - min;
           return (double) offset / maxOffset;
-        }, Joined.with(Serdes.Integer(), Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
+        }, Joined.with(Serdes.Integer(),
+            JsonSerde.of(GlobalStockQuantity.class),
+            JsonSerde.of(new TypeReference<>() { })));
     globalStockPercentagePerItem.to("global-stock-percentage",
         Produced.with(Serdes.Integer(), Serdes.Double()));
 
@@ -173,6 +181,48 @@ public class StreamProcessor {
     ids.add(key.at("/payload/warehouseid"));
     ids.add(key.at("/payload/stockitemid"));
     return new KeyValue<>(ids, currentState);
+  }
+
+  private static class GlobalStockQuantity {
+    private final int quantity;
+
+    private final boolean subtractorUpdate;
+
+    public GlobalStockQuantity(int quantity, boolean subtractorUpdate) {
+      this.quantity = quantity;
+      this.subtractorUpdate = subtractorUpdate;
+    }
+
+    public static GlobalStockQuantity zero() {
+      return new GlobalStockQuantity(0, false);
+    }
+
+    public GlobalStockQuantity add(int quantity) {
+      return new GlobalStockQuantity(this.quantity + quantity, false);
+    }
+
+    public GlobalStockQuantity subtract(int quantity) {
+      return new GlobalStockQuantity(this.quantity - quantity, true);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("quantity", quantity)
+          .add("subtractorUpdate", subtractorUpdate)
+          .toString();
+    }
+
+    public int getQuantity() {
+      return quantity;
+    }
+
+    /**
+     * @return true if this quantity comes from a subtractor used to aggregate a KTable.
+     */
+    public boolean isSubtractorUpdate() {
+      return subtractorUpdate;
+    }
   }
 
   private static class WarehouseStockQuantity {
