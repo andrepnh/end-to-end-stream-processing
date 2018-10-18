@@ -4,6 +4,17 @@ services:
     build: postgres
     ports:
       - "5432:5432"
+  elasticsearch:
+    image: elasticsearch:5.2.1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      discovery.type: single-node
+  kibana:
+    image: kibana:5.2.1
+    ports:
+      - "5601:5601"
   zookeeper:
     image: wurstmeister/zookeeper
     ports:
@@ -15,6 +26,7 @@ services:
     environment:
       KAFKA_ADVERTISED_HOST_NAME: ${DOCKER_HOST_IP}
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: warehouse-stock:2:1,warehouse-capacity:2:1,global-stock:2:1,global-stock-percentage:2:1"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
   connect:
@@ -27,15 +39,17 @@ services:
       KAFKA_CONNECT_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONNECT_GROUP_ID: connect-cluster
       KAFKA_CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
-      KAFKA_CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 2
-      KAFKA_CONNECT_OFFSET_STORAGE_PARTITIONS: 4
+      KAFKA_CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      KAFKA_CONNECT_OFFSET_STORAGE_PARTITIONS: 2
       KAFKA_CONNECT_CONFIG_STORAGE_TOPIC: connect-configs
-      KAFKA_CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 2
+      KAFKA_CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
       KAFKA_CONNECT_STATUS_STORAGE_TOPIC: connect-status
-      KAFKA_CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 2
-      KAFKA_CONNECT_STATUS_STORAGE_PARTITIONS: 2
+      KAFKA_CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      KAFKA_CONNECT_STATUS_STORAGE_PARTITIONS: 1
       KAFKA_CONNECT_REST_ADVERTISED_HOST_NAME: ${DOCKER_HOST_IP}
       KAFKA_CONNECT_PLUGIN_PATH: /opt/kafka/connectors
       KAFKA_CONNECT_OFFSET_FLUSH_INTERVAL_MS: 60000
       KAFKA_CONNECT_TASK_SHUTDOWN_GRACEFUL_TIMEOUT_MS: 10000
       KAFKA_CONNECT_OFFSET_FLUSH_TIMEOUT_MS: 5000
+      KAFKA_CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      KAFKA_CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"

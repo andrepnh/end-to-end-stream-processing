@@ -3,24 +3,35 @@ package com.github.andrepnh.kafka.playground.stream;
 import com.google.common.base.MoreObjects;
 import java.util.Objects;
 
-public class Allocation {
+public class WarehouseAllocation {
+  private final String name;
+
+  private final float latitude;
+
+  private final float longitude;
+
   private final double allocation;
 
   private final AllocationThreshold threshold;
 
-  public Allocation(double allocation, AllocationThreshold threshold) {
+  public WarehouseAllocation(String name, float latitude, float longitude, double allocation,
+      AllocationThreshold threshold) {
+    this.name = name;
+    this.latitude = latitude;
+    this.longitude = longitude;
     this.allocation = allocation;
     this.threshold = threshold;
   }
 
-  public static Allocation calculate(int stockItems, int warehouseCapacity) {
+  public static WarehouseAllocation calculate(String name, float latitude, float longitude,
+      int stockItems, int warehouseCapacity) {
     var allocation = (double) stockItems / warehouseCapacity;
     if (allocation <= AllocationThreshold.LOW.getThreshold()) {
-      return new Allocation(allocation, AllocationThreshold.LOW);
+      return new WarehouseAllocation(name, latitude, longitude, allocation, AllocationThreshold.LOW);
     } else if (allocation <= AllocationThreshold.NORMAL.getThreshold()) {
-      return new Allocation(allocation, AllocationThreshold.NORMAL);
+      return new WarehouseAllocation(name, latitude, longitude, allocation, AllocationThreshold.NORMAL);
     } else {
-      return new Allocation(allocation, AllocationThreshold.HIGH);
+      return new WarehouseAllocation(name, latitude, longitude, allocation, AllocationThreshold.HIGH);
     }
   }
 
@@ -32,7 +43,7 @@ public class Allocation {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    Allocation that = (Allocation) o;
+    WarehouseAllocation that = (WarehouseAllocation) o;
     return allocation == that.allocation && threshold == that.threshold;
   }
 

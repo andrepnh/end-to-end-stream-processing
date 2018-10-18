@@ -1,8 +1,14 @@
 package com.github.andrepnh.kafka.playground.db.gen;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Strings;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Objects;
 import org.eclipse.collections.api.tuple.Pair;
 
@@ -13,21 +19,28 @@ public class Warehouse {
 
   private final String name;
 
+  private final int storageCapacity;
+
   private final float latitude;
 
   private final float longitude;
 
-  private final int storageCapacity;
+  private final ZonedDateTime lastUpdate;
 
-  public Warehouse(int id, String name, int storageCapacity, float latitude, float longitude) {
+  public Warehouse(int id, String name, int storageCapacity, float latitude, float longitude,
+      ZonedDateTime lastUpdate) {
     checkArgument(Math.abs(latitude) <= 90);
     checkArgument(Math.abs(longitude) <= 180);
     checkArgument(storageCapacity > 0);
+    checkArgument(!Strings.isNullOrEmpty(name));
+    checkNotNull(lastUpdate);
     this.id = id;
     this.name = name;
-    this.storageCapacity = storageCapacity;
     this.latitude = latitude;
     this.longitude = longitude;
+    this.storageCapacity = storageCapacity;
+    // Nanosecond precision is not available
+    this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC).withNano(0);
   }
 
   public static Warehouse random(int idUpperBoundInclusive) {
@@ -37,7 +50,8 @@ public class Warehouse {
         Generator.words(),
         Generator.positive(MAX_STORAGE_CAPACITY),
         latitudeAndLongitude.getOne(),
-        latitudeAndLongitude.getTwo());
+        latitudeAndLongitude.getTwo(),
+        ZonedDateTime.now());
   }
 
   @Override
@@ -65,6 +79,7 @@ public class Warehouse {
         .add("latitude", latitude)
         .add("longitude", longitude)
         .add("storageCapacity", storageCapacity)
+        .add("lastUpdate", lastUpdate)
         .toString();
   }
 
@@ -86,5 +101,9 @@ public class Warehouse {
 
   public int getStorageCapacity() {
     return storageCapacity;
+  }
+
+  public ZonedDateTime getLastUpdate() {
+    return lastUpdate;
   }
 }

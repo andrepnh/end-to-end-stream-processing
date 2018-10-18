@@ -1,0 +1,16 @@
+{
+  "name": "elasticsearch-inventory-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+    "tasks.max": "1",
+    "topics": "warehouse-capacity,global-stock,global-stock-percentage",
+    "key.ignore": "false",
+    "connection.url": "http://elasticsearch:9200",
+    "type.name": "kafka-connect",
+    "name": "elasticsearch-inventory-sink",
+    "schema.ignore": "true",
+    "schemas.enable": "false",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false"
+  }
+}

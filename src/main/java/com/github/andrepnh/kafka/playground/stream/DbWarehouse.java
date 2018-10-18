@@ -2,6 +2,8 @@ package com.github.andrepnh.kafka.playground.stream;
 
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.google.common.base.MoreObjects;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Objects;
 
 public class DbWarehouse {
@@ -15,16 +17,21 @@ public class DbWarehouse {
 
   private final int storagecapacity;
 
-  public DbWarehouse(int id, String name, int storagecapacity, float latitude, float longitude) {
+  private final long lastupdate;
+
+  public DbWarehouse(int id, String name, int storagecapacity, float latitude, float longitude,
+      long lastupdate) {
     this.id = id;
     this.name = name;
     this.storagecapacity = storagecapacity;
     this.latitude = latitude;
     this.longitude = longitude;
+    this.lastupdate = lastupdate;
   }
 
   public Warehouse toWarehouse() {
-    return new Warehouse(id, name, storagecapacity, latitude, longitude);
+    return new Warehouse(id, name, storagecapacity, latitude, longitude,
+        Instant.ofEpochMilli(lastupdate).atZone(ZoneOffset.UTC));
   }
 
   @Override

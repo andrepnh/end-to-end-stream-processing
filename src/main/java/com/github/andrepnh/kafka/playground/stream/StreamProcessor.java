@@ -1,5 +1,6 @@
 package com.github.andrepnh.kafka.playground.stream;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -73,24 +74,24 @@ public class StreamProcessor {
         .groupBy((key, value) -> new KeyValue<>(key.get(0), value),
             Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
         .reduce(Quantity::sum, Quantity::subtract);
-    KStream<WarehouseKey, Allocation> warehouseCapacity = warehouseStream
+    KTable<Integer, Warehouse> warehouseTable = warehouseStream
+        .groupByKey(Serialized.with(Serdes.Integer(), JsonSerde.of(Warehouse.class)))
+        .reduce(this::lastWriteWins);
+    KTable<Integer, WarehouseStockQuantity> warehouseStockQtyTable = warehouseTable
         .join(warehouseQuantityTable,
             WarehouseStockQuantity::new,
-            Joined.with(Serdes.Integer(),
-                JsonSerde.of(Warehouse.class),
-                JsonSerde.of(Quantity.class)))
+            Materialized.with(Serdes.Integer(), JsonSerde.of(WarehouseStockQuantity.class)));
+    var warehouseStockQtyStream = warehouseStockQtyTable.toStream();
+    KStream<Integer, WarehouseAllocation> warehouseCapacity = warehouseStockQtyStream
         .map((id, warehouseStockQuantity) -> {
           var warehouse = warehouseStockQuantity.getWarehouse();
           var qty = warehouseStockQuantity.getStockQuantity();
-          var key = new WarehouseKey(id,
-              warehouse.getName(),
-              warehouse.getLatitude(),
-              warehouse.getLongitude());
-          var allocation = Allocation.calculate(qty.getQuantity(), warehouse.getStorageCapacity());
-          return new KeyValue<>(key, allocation);
+          var allocation = WarehouseAllocation.calculate(warehouse.getName(), warehouse.getLatitude(),
+              warehouse.getLongitude(), qty.getQuantity(), warehouse.getStorageCapacity());
+          return new KeyValue<>(id, allocation);
         });
     warehouseCapacity.to("warehouse-capacity",
-        Produced.with(JsonSerde.of(WarehouseKey.class), JsonSerde.of(Allocation.class)));
+        Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class)));
 
 
     KTable<Integer, GlobalStockQuantity> metaGlobalStock =
@@ -104,9 +105,13 @@ public class StreamProcessor {
                 (key, value, acc) -> acc.subtract(value.getQuantity()),
                 Materialized.with(Serdes.Integer(), JsonSerde.of(GlobalStockQuantity.class)));
     var metaGlobalStockStream = metaGlobalStock.toStream();
-    KStream<Integer, Integer> globalStockStream = metaGlobalStockStream
-        .mapValues(GlobalStockQuantity::getQuantity);
-    globalStockStream.to("global-stock", Produced.with(Serdes.Integer(), Serdes.Integer()));
+    metaGlobalStockStream
+        .map((id, quantity) -> new KeyValue<>(
+            id,
+            new QuantityWrapper(quantity.getQuantity())))
+        .to("global-stock", Produced.with(
+            JsonSerde.of(Integer.class),
+            JsonSerde.of(QuantityWrapper.class)));
 
     KTable<Integer, List<Integer>> globalStockMinMax = metaGlobalStockStream
         .groupByKey()
@@ -135,15 +140,17 @@ public class StreamProcessor {
         }, Joined.with(Serdes.Integer(),
             JsonSerde.of(GlobalStockQuantity.class),
             JsonSerde.of(new TypeReference<>() { })));
-    globalStockPercentagePerItem.to("global-stock-percentage",
-        Produced.with(Serdes.Integer(), Serdes.Double()));
+    globalStockPercentagePerItem
+        .map((id, percentage) -> new KeyValue<>(id, new PercentageWrapper(percentage)))
+        .to("global-stock-percentage",
+            Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(PercentageWrapper.class)));
 
     return builder.build();
   }
 
   private KeyValue<JsonNode, JsonNode> stripWarehouseMetadata(JsonNode key, JsonNode value) {
-    var id = JsonNodeFactory.instance.numberNode(key.at("/payload/id").intValue());
-    var currentState = value.at("/payload/after");
+    var id = JsonNodeFactory.instance.numberNode(key.at("/id").intValue());
+    var currentState = value.at("/after");
     return new KeyValue<>(id, currentState);
   }
 
@@ -167,20 +174,43 @@ public class StreamProcessor {
     }
   }
 
-  private Quantity lastWriteWins(Quantity stockQuantity1, Quantity quantity) {
-    if (stockQuantity1.getLastUpdate().isAfter(quantity.getLastUpdate())) {
-      return stockQuantity1;
-    } else {
+  private Warehouse lastWriteWins(Warehouse warehouse1, Warehouse warehouse2) {
+    return warehouse1.getLastUpdate().isAfter(warehouse2.getLastUpdate())
+        ? warehouse1 : warehouse2;
+  }
+
+  private KeyValue<JsonNode, JsonNode> stripStockQuantityMetadata(JsonNode key, JsonNode value) {
+    var currentState = value.at("/after");
+    ArrayNode ids = JsonNodeFactory.instance.arrayNode(2);
+    ids.add(key.at("/warehouseid"));
+    ids.add(key.at("/stockitemid"));
+    return new KeyValue<>(ids, currentState);
+  }
+
+  public static class QuantityWrapper {
+    private final int quantity;
+
+    // For whatever reason the parameter names module did not work here
+    public QuantityWrapper(@JsonProperty("quantity") int quantity) {
+      this.quantity = quantity;
+    }
+
+    public int getQuantity() {
       return quantity;
     }
   }
 
-  private KeyValue<JsonNode, JsonNode> stripStockQuantityMetadata(JsonNode key, JsonNode value) {
-    var currentState = value.at("/payload/after");
-    ArrayNode ids = JsonNodeFactory.instance.arrayNode(2);
-    ids.add(key.at("/payload/warehouseid"));
-    ids.add(key.at("/payload/stockitemid"));
-    return new KeyValue<>(ids, currentState);
+  public static class PercentageWrapper {
+    private final double percentage;
+
+    // For whatever reason the parameter names module did not work here
+    public PercentageWrapper(@JsonProperty("percentage") double percentage) {
+      this.percentage = percentage;
+    }
+
+    public double getPercentage() {
+      return percentage;
+    }
   }
 
   private static class GlobalStockQuantity {

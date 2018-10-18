@@ -17,7 +17,8 @@ import java.util.stream.Stream;
 
 public class Main {
   private static final String INSERT_WAREHOUSE =
-      "INSERT INTO Warehouse(id, name, latitude, longitude, storageCapacity) VALUES (?, ?, ?, ?, ?) "
+      "INSERT INTO Warehouse(id, name, latitude, longitude, storageCapacity, lastUpdate) "
+          + "VALUES (?, ?, ?, ?, ?, ?) "
           + "ON CONFLICT DO NOTHING";
 
   private static final String INSERT_ITEM =
@@ -86,6 +87,7 @@ public class Main {
       preparedStatement.setFloat(3, warehouse.getLatitude());
       preparedStatement.setFloat(4, warehouse.getLongitude());
       preparedStatement.setInt(5, warehouse.getStorageCapacity());
+      preparedStatement.setTimestamp(6, new Timestamp(warehouse.getLastUpdate().toInstant().toEpochMilli()));
       preparedStatement.execute();
     } catch (SQLException ex) {
       throw new IllegalStateException(ex);

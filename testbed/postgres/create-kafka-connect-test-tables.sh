@@ -15,7 +15,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
         name                varchar(40) NOT NULL,
         latitude            real NOT NULL,
         longitude           real NOT NULL,
-        storageCapacity     int NOT NULL
+        storageCapacity     int NOT NULL,
+        lastUpdate          timestamp NOT NULL
     );
 
     CREATE TABLE StockQuantity (
