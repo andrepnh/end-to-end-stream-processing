@@ -11,6 +11,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -86,8 +87,9 @@ public class StreamProcessor {
         .map((id, warehouseStockQuantity) -> {
           var warehouse = warehouseStockQuantity.getWarehouse();
           var qty = warehouseStockQuantity.getStockQuantity();
-          var allocation = WarehouseAllocation.calculate(warehouse.getName(), warehouse.getLatitude(),
-              warehouse.getLongitude(), qty.getQuantity(), warehouse.getStorageCapacity());
+          var allocation = WarehouseAllocation.calculate(
+              warehouse.getName(), warehouse.getLatitude(), warehouse.getLongitude(),
+              qty.getQuantity(), warehouse.getStorageCapacity(), qty.getLastUpdate());
           return new KeyValue<>(id, allocation);
         });
     warehouseCapacity.to("warehouse-capacity",
@@ -101,14 +103,14 @@ public class StreamProcessor {
                 Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
             .aggregate(
                 GlobalStockQuantity::zero,
-                (key, value, acc) -> acc.add(value.getQuantity()),
-                (key, value, acc) -> acc.subtract(value.getQuantity()),
+                (key, quantity, acc) -> acc.add(quantity),
+                (key, quantity, acc) -> acc.subtract(quantity),
                 Materialized.with(Serdes.Integer(), JsonSerde.of(GlobalStockQuantity.class)));
     var metaGlobalStockStream = metaGlobalStock.toStream();
     metaGlobalStockStream
         .map((id, quantity) -> new KeyValue<>(
             id,
-            new QuantityWrapper(quantity.getQuantity())))
+            new QuantityWrapper(quantity)))
         .to("global-stock", Produced.with(
             JsonSerde.of(Integer.class),
             JsonSerde.of(QuantityWrapper.class)));
@@ -132,16 +134,16 @@ public class StreamProcessor {
               }
               return Lists.newArrayList(min, max);
             }, Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
-    KStream<Integer, Double> globalStockPercentagePerItem = metaGlobalStockStream
+    KStream<Integer, PercentageWrapper> globalStockPercentagePerItem = metaGlobalStockStream
         .join(globalStockMinMax, (global, minMax) -> {
           int min = minMax.get(0), max = minMax.get(1);
           int offset = global.getQuantity() - min, maxOffset = max - min;
-          return (double) offset / maxOffset;
+          return new PercentageWrapper((double) offset / maxOffset, global.getLastUpdate());
         }, Joined.with(Serdes.Integer(),
             JsonSerde.of(GlobalStockQuantity.class),
-            JsonSerde.of(new TypeReference<>() { })));
+            JsonSerde.of(new TypeReference<>() { })))
+        .filter((id, percentageWrapper) -> Double.isFinite(percentageWrapper.getPercentage()));
     globalStockPercentagePerItem
-        .map((id, percentage) -> new KeyValue<>(id, new PercentageWrapper(percentage)))
         .to("global-stock-percentage",
             Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(PercentageWrapper.class)));
 
@@ -190,26 +192,47 @@ public class StreamProcessor {
   public static class QuantityWrapper {
     private final int quantity;
 
+    @JsonProperty("@timestamp")
+    private final ZonedDateTime lastUpdate;
+
     // For whatever reason the parameter names module did not work here
-    public QuantityWrapper(@JsonProperty("quantity") int quantity) {
+    public QuantityWrapper(@JsonProperty("quantity") int quantity,
+        @JsonProperty("@timestamp") ZonedDateTime lastUpdate) {
       this.quantity = quantity;
+      this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC);
+    }
+
+    public QuantityWrapper(GlobalStockQuantity quantity) {
+      this(quantity.getQuantity(), quantity.getLastUpdate());
     }
 
     public int getQuantity() {
       return quantity;
+    }
+
+    public ZonedDateTime getLastUpdate() {
+      return lastUpdate;
     }
   }
 
   public static class PercentageWrapper {
     private final double percentage;
 
+    private final ZonedDateTime lastUpdate;
+
     // For whatever reason the parameter names module did not work here
-    public PercentageWrapper(@JsonProperty("percentage") double percentage) {
+    public PercentageWrapper(@JsonProperty("percentage") double percentage,
+        @JsonProperty("@timestamp") ZonedDateTime lastUpdate) {
       this.percentage = percentage;
+      this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC);
     }
 
     public double getPercentage() {
       return percentage;
+    }
+
+    public ZonedDateTime getLastUpdate() {
+      return lastUpdate;
     }
   }
 
@@ -218,21 +241,28 @@ public class StreamProcessor {
 
     private final boolean subtractorUpdate;
 
-    public GlobalStockQuantity(int quantity, boolean subtractorUpdate) {
+    private final ZonedDateTime lastUpdate;
+
+    public GlobalStockQuantity(int quantity, boolean subtractorUpdate, ZonedDateTime lastUpdate) {
       this.quantity = quantity;
       this.subtractorUpdate = subtractorUpdate;
+      this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC);
     }
 
     public static GlobalStockQuantity zero() {
-      return new GlobalStockQuantity(0, false);
+      return new GlobalStockQuantity(0, false, LocalDateTime.MIN.atZone(ZoneOffset.UTC));
     }
 
-    public GlobalStockQuantity add(int quantity) {
-      return new GlobalStockQuantity(this.quantity + quantity, false);
+    public GlobalStockQuantity add(Quantity quantity) {
+      var lastUpdate = quantity.getLastUpdate().isAfter(this.lastUpdate)
+          ? quantity.getLastUpdate() : this.lastUpdate;
+      return new GlobalStockQuantity(this.quantity + quantity.getQuantity(), false, lastUpdate);
     }
 
-    public GlobalStockQuantity subtract(int quantity) {
-      return new GlobalStockQuantity(this.quantity - quantity, true);
+    public GlobalStockQuantity subtract(Quantity quantity) {
+      var lastUpdate = quantity.getLastUpdate().isAfter(this.lastUpdate)
+          ? quantity.getLastUpdate() : this.lastUpdate;
+      return new GlobalStockQuantity(this.quantity - quantity.getQuantity(), true, lastUpdate);
     }
 
     @Override
@@ -240,11 +270,16 @@ public class StreamProcessor {
       return MoreObjects.toStringHelper(this)
           .add("quantity", quantity)
           .add("subtractorUpdate", subtractorUpdate)
+          .add("lastUpdate", lastUpdate)
           .toString();
     }
 
     public int getQuantity() {
       return quantity;
+    }
+
+    public ZonedDateTime getLastUpdate() {
+      return lastUpdate;
     }
 
     /**

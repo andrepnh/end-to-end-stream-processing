@@ -1,8 +1,10 @@
 package com.github.andrepnh.kafka.playground;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Strings;
 import com.google.common.io.CharStreams;
 import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.impl.factory.Lists;
 import org.eclipse.collections.impl.list.mutable.primitive.IntArrayList;
 
 import java.io.IOException;
@@ -15,6 +17,11 @@ import static com.google.common.base.Preconditions.checkState;
 /** Figures out host ports for every kafka node in the cluster */
 public class PortInspector {
   public IntList inspect(int instances) {
+    var portsOverride = System.getProperty("kafka-ports");
+    if (!Strings.isNullOrEmpty(portsOverride)) {
+      return Lists.immutable.of(portsOverride.split(","))
+          .collectInt(Integer::parseInt);
+    }
     ensureBashAvailable();
     var ports = new IntArrayList();
     for (int i = 1; i <= instances; i++) {

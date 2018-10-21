@@ -3,14 +3,23 @@ package com.github.andrepnh.kafka.playground;
 import com.github.andrepnh.kafka.playground.db.gen.StockItem;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
 import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
+import com.github.andrepnh.kafka.playground.stream.StreamProcessor;
+import com.google.common.collect.Table.Cell;
 import com.google.common.collect.Tables;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalTime;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -30,35 +39,59 @@ public class Main {
     + "ON CONFLICT (warehouseId, stockItemId) DO "
     + "UPDATE SET quantity = ?, lastUpdate = ?";
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws IOException {
+    if (!(args.length > 0 && "generate".equals(args[0]))) {
+      StreamProcessor.main(args);
+      return;
+    }
     var maxWarehouses = getProperty("max.warehouses", 300, Integer::parseInt);
-    var maxItems = getProperty("max.items", 1000000, Integer::parseInt);
-    var stocks = getProperty("stock.to.generate", 10000, Integer::parseInt);
+    var maxItems = getProperty("max.items", 500, Integer::parseInt);
+    var stocks = getProperty("stock.to.generate", 100000, Integer::parseInt);
     Supplier<Connection> dbConnectionSupplier = createDbConnectionSupplier();
+    Supplier<Cell<Warehouse, StockItem, StockQuantity>> randomTripleSupplier = () -> {
+      var warehouse = Warehouse.random(maxWarehouses);
+      var item = StockItem.random(maxItems);
+      return Tables.immutableCell(warehouse, item,
+          StockQuantity.random(warehouse.getId(), item.getId()));
+    };
 
-    Stream
-        .generate(() -> {
-          var warehouse = Warehouse.random(maxWarehouses);
-          var item = StockItem.random(maxItems);
-          return Tables.immutableCell(warehouse, item, StockQuantity.random(warehouse.getId(), item.getId()));
-        })
-        .parallel()
-        .limit(stocks)
-        .peek(unused -> {
-          try {
-            TimeUnit.MILLISECONDS.sleep(12);
-          } catch (InterruptedException ex) {
-            throw new IllegalStateException(ex);
-          }
-        })
-        .forEach(triple -> {
-          Warehouse warehouse = triple.getRowKey();
-          StockItem item = triple.getColumnKey();
-          StockQuantity stock = triple.getValue();
-          insert(warehouse, dbConnectionSupplier);
-          insert(item, dbConnectionSupplier);
-          insert(stock, dbConnectionSupplier);
-        });
+    final var millisecondsSleep = new AtomicInteger(100);
+    final var insertions = new AtomicInteger(0);
+    var pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+    pool.submit(() -> {
+      Stream
+          .iterate(randomTripleSupplier, supplier -> supplier)
+          .parallel()
+          .limit(stocks)
+          .forEach(supplier -> {
+            Cell<Warehouse, StockItem, StockQuantity> triple = supplier.get();
+            Warehouse warehouse = triple.getRowKey();
+            StockItem item = triple.getColumnKey();
+            StockQuantity stock = triple.getValue();
+            insert(warehouse, dbConnectionSupplier);
+            insert(item, dbConnectionSupplier);
+            insert(stock, dbConnectionSupplier);
+            if (insertions.incrementAndGet() % 100 == 0) {
+              System.out.println(LocalTime.now() + " - 100 records inserted");
+            }
+            try {
+              TimeUnit.MILLISECONDS.sleep(millisecondsSleep.get());
+            } catch (InterruptedException e) {
+              throw new IllegalStateException(e);
+            }
+          });
+    });
+    try (var reader = new BufferedReader(new InputStreamReader(System.in))) {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        line = line.trim();
+        int sleep = Integer.parseInt(line);
+        if (sleep == -1) {
+          System.exit(0);
+        }
+        millisecondsSleep.set(sleep);
+      }
+    }
   }
 
   private static Supplier<Connection> createDbConnectionSupplier() {
