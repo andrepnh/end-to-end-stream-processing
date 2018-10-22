@@ -4,17 +4,17 @@ services:
     build: postgres
     ports:
       - "5432:5432"
-  elasticsearch:
-    image: elasticsearch:6.4.1
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    environment:
-      discovery.type: single-node
-  kibana:
-    image: kibana:6.4.1
-    ports:
-      - "5601:5601"
+  # elasticsearch:
+  #   image: elasticsearch:6.4.1
+  #   ports:
+  #     - "9200:9200"
+  #     - "9300:9300"
+  #   environment:
+  #     discovery.type: single-node
+  # kibana:
+  #   image: kibana:6.4.1
+  #   ports:
+  #     - "5601:5601"
   zookeeper:
     image: wurstmeister/zookeeper
     ports:
@@ -29,6 +29,15 @@ services:
       KAFKA_CREATE_TOPICS: warehouse-stock:2:1,warehouse-capacity:2:1,global-stock:2:1,global-stock-percentage:2:1"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  ksql:
+    build: ksql
+    ports:
+      - "8088:8088"
+    environment:
+      KSQL_BOOTSTRAP_SERVERS: kafka:9092
+      KSQL_KSQL_SERVICE_ID: ksql
+      KSQL_LISTENERS: http://0.0.0.0:8088/
+      #KSQL_KSQL_QUERIES_FILE: /etc/ksql/ksql-queries.sql
   connect:
     build: connect
     ports:
