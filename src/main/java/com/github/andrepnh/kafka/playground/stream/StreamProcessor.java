@@ -74,7 +74,7 @@ public class StreamProcessor {
     KTable<Integer, Quantity> warehouseQuantityTable = warehouseStock
         .groupBy((key, value) -> new KeyValue<>(key.get(0), value),
             Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
-        .reduce(Quantity::sum, Quantity::subtract);
+        .reduce(Quantity::add, Quantity::subtract);
     KTable<Integer, Warehouse> warehouseTable = warehouseStream
         .groupByKey(Serialized.with(Serdes.Integer(), JsonSerde.of(Warehouse.class)))
         .reduce(this::lastWriteWins);
@@ -95,7 +95,6 @@ public class StreamProcessor {
     warehouseCapacity.to("warehouse-allocation",
         Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class)));
 
-
     KTable<Integer, GlobalStockQuantity> metaGlobalStock =
         warehouseStock
             .groupBy(
@@ -115,6 +114,25 @@ public class StreamProcessor {
         JsonSerde.of(Integer.class),
         JsonSerde.of(QuantityWrapper.class)));
 
+    KTable<List<Integer>, Quantity> demandTable = stockStream
+        .filter((warehouseItemPair, quantity) -> quantity.getQuantity() < 0)
+        .groupByKey(Serialized.with(
+            JsonSerde.of(new TypeReference<>() { }),
+            JsonSerde.of(StockQuantity.class)))
+        .aggregate(
+            () -> Quantity.empty(LocalDateTime.MIN.atZone(ZoneOffset.UTC)),
+            this::lastWriteWins,
+            Materialized.with(JsonSerde.of(new TypeReference<>() { }), JsonSerde.of(Quantity.class)));
+    KTable<Integer, Quantity> globalDemandTable = demandTable.groupBy(
+        (warehouseItemPair, quantity) -> new KeyValue<>(warehouseItemPair.get(1), quantity),
+        Serialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)))
+        .reduce(Quantity::add,
+            Quantity::subtract,
+            Materialized.with(Serdes.Integer(), JsonSerde.of(Quantity.class)));
+    globalDemandTable
+        .toStream()
+        .to("high-demand-stock",
+            Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(Quantity.class)));
 
     KTable<Integer, List<Integer>> globalStockMinMax = metaGlobalStockStream
         .groupByKey()
@@ -189,7 +207,6 @@ public class StreamProcessor {
   public static class QuantityWrapper {
     private final int quantity;
 
-    @JsonProperty("@timestamp")
     private final ZonedDateTime lastUpdate;
 
     // For whatever reason the parameter names module did not work here
