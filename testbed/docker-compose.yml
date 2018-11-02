@@ -26,7 +26,7 @@ services:
     environment:
       KAFKA_ADVERTISED_HOST_NAME: ${DOCKER_HOST_IP}
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CREATE_TOPICS: warehouse-stock:2:1,warehouse-capacity:2:1,global-stock:2:1,global-stock-percentage:2:1"
+      KAFKA_CREATE_TOPICS: warehouse-stock:4:1,warehouse-allocation:4:1,global-stock:4:1,stock-global-percentage:4:1,connect_test.public.warehouse:4:1,connect_test.public.stockquantity:4:1,connect_test.public.stockitem:4:1"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
   ksql:
