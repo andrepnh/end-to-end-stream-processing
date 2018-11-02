@@ -11,18 +11,18 @@ import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.Serdes;
 import org.junit.Test;
 
-public class WarehouseCapacityTest extends BaseStreamTest {
+public class WarehouseAllocationTest extends BaseStreamTest {
 
   @Test
   public void shouldUpdateWarehouseAllocationEvenIfWarehousesAreNotChanged() {
     final int capacity = 100, quantity = 10;
     pipe(new Warehouse(1, "one", capacity, 50, 50, ZonedDateTime.now()));
-    pipe(new StockQuantity(1, 1, 1, LocalDateTime.now().atZone(ZoneOffset.UTC)));
-    ProducerRecord<WarehouseKey, WarehouseAllocation> record =
-        readSingle("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
-            WarehouseAllocation.class));
+    pipe(new StockQuantity(1, 1, quantity, LocalDateTime.now().atZone(ZoneOffset.UTC)));
+    ProducerRecord<Integer, WarehouseAllocation> record = readSingle(
+        "warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class));
     assertEquals(AllocationThreshold.LOW, record.value().getThreshold());
   }
 
@@ -35,18 +35,18 @@ public class WarehouseCapacityTest extends BaseStreamTest {
     final Warehouse warehouse1 = new Warehouse(1, "one", capacity, 50, 50, ZonedDateTime.now());
     pipe(warehouse1);
     pipe(stockQuantity(warehouse1, 1, lowQuantity));
-    ProducerRecord<WarehouseKey, WarehouseAllocation> record =
-        readLast("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
+    ProducerRecord<Integer, WarehouseAllocation> record =
+        readLast("warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(
             WarehouseAllocation.class));
     assertEquals(AllocationThreshold.LOW, record.value().getThreshold());
 
     pipe(stockQuantity(warehouse1, 1, normalQuantity));
-    record = readLast("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
+    record = readLast("warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(
         WarehouseAllocation.class));
     assertEquals(AllocationThreshold.NORMAL, record.value().getThreshold());
 
     pipe(stockQuantity(warehouse1, 1, highQuantity));
-    record = readLast("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
+    record = readLast("warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(
         WarehouseAllocation.class));
     assertEquals(AllocationThreshold.HIGH, record.value().getThreshold());
   }
@@ -57,15 +57,13 @@ public class WarehouseCapacityTest extends BaseStreamTest {
     final Warehouse warehouse1 = new Warehouse(1, "one", capacity, 50, 50, ZonedDateTime.now());
     pipe(stockQuantity(warehouse1, 1, quantity1));
     pipe(warehouse1);
-    ProducerRecord<WarehouseKey, WarehouseAllocation> record =
-        readLast("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
-            WarehouseAllocation.class));
+    ProducerRecord<Integer, WarehouseAllocation> record =
+        readLast("warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class));
     assertEquals((double) quantity1 / capacity, record.value().getAllocation(), 0.000001);
 
     pipe(stockQuantity(warehouse1, 1, quantity2));
     pipe(warehouse1);
-    record = readLast("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
-        WarehouseAllocation.class));
+    record = readLast("warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class));
     assertEquals((double) quantity2 / capacity, record.value().getAllocation(), 0.000001);
   }
 
@@ -75,9 +73,8 @@ public class WarehouseCapacityTest extends BaseStreamTest {
     final Warehouse warehouse = new Warehouse(1, "one", capacity, 50, 50, ZonedDateTime.now());
     pipe(stockQuantity(warehouse, 1, item1), stockQuantity(warehouse, 2, item2));
     pipe(warehouse);
-    ProducerRecord<WarehouseKey, WarehouseAllocation> record =
-        read("warehouse-capacity", JsonSerde.of(WarehouseKey.class), JsonSerde.of(
-            WarehouseAllocation.class));
+    ProducerRecord<Integer, WarehouseAllocation> record =
+        read("warehouse-allocation", JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class));
     var allocation = (double) (item1 + item2) / capacity;
     assertEquals(allocation, record.value().getAllocation(), 0.000001);
   }
@@ -94,13 +91,13 @@ public class WarehouseCapacityTest extends BaseStreamTest {
     pipe(stockQuantity(warehouse1, 1, item1DemandOnWarehouse1),
         stockQuantity(warehouse2, 1, item1DemandOnWarehouse2));
     pipe(warehouse1, warehouse2);
-    Map<Integer, ProducerRecord<WarehouseKey, WarehouseAllocation>> recordByWarehouse =
+    Map<Integer, ProducerRecord<Integer, WarehouseAllocation>> recordByWarehouse =
         readStream(
-            "warehouse-capacity",
-            JsonSerde.of(WarehouseKey.class),
+            "warehouse-allocation",
+            JsonSerde.of(Integer.class),
             JsonSerde.of(WarehouseAllocation.class))
         .collect(Collectors.groupingBy(
-            record -> record.key().getId(),
+            ProducerRecord::key,
             MoreCollectors.onlyElement()));
     assertEquals((double) item1DemandOnWarehouse1 / warehouse1Capacity,
         recordByWarehouse.get(warehouse1.getId()).value().getAllocation(),

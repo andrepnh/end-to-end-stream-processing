@@ -65,7 +65,7 @@ public class StreamProcessorTest extends BaseStreamTest {
   }
 
   @Test
-  public void shouldUpdateWarehouseTopicWithNewerDbUpdatesOnlyIfTheyAreReallyNew() {
+  public void shouldNotUpdateWarehouseTopicWithIncomingDbUpdateIfItIsNotNewer() {
     var update = new StockQuantity(1, 1, 20,
         ZonedDateTime.now(ZoneOffset.UTC).minusSeconds(5));
     pipe(update);

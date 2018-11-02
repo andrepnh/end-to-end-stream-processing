@@ -92,7 +92,7 @@ public class StreamProcessor {
               qty.getQuantity(), warehouse.getStorageCapacity(), qty.getLastUpdate());
           return new KeyValue<>(id, allocation);
         });
-    warehouseCapacity.to("warehouse-capacity",
+    warehouseCapacity.to("warehouse-allocation",
         Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(WarehouseAllocation.class)));
 
 
@@ -107,13 +107,14 @@ public class StreamProcessor {
                 (key, quantity, acc) -> acc.subtract(quantity),
                 Materialized.with(Serdes.Integer(), JsonSerde.of(GlobalStockQuantity.class)));
     var metaGlobalStockStream = metaGlobalStock.toStream();
-    metaGlobalStockStream
+    KStream<Integer, QuantityWrapper> globalStockStream = metaGlobalStockStream
         .map((id, quantity) -> new KeyValue<>(
             id,
-            new QuantityWrapper(quantity)))
-        .to("global-stock", Produced.with(
-            JsonSerde.of(Integer.class),
-            JsonSerde.of(QuantityWrapper.class)));
+            new QuantityWrapper(quantity)));
+    globalStockStream.to("global-stock", Produced.with(
+        JsonSerde.of(Integer.class),
+        JsonSerde.of(QuantityWrapper.class)));
+
 
     KTable<Integer, List<Integer>> globalStockMinMax = metaGlobalStockStream
         .groupByKey()
@@ -126,15 +127,11 @@ public class StreamProcessor {
                 // its subtractor dropping the value to 0 and the actual update won't be reflected.
                 return Lists.newArrayList(min, max);
               }
-              if (value.getQuantity() < min) {
-                min = value.getQuantity();
-              }
-              if (value.getQuantity() > max) {
-                max = value.getQuantity();
-              }
+              min = Math.min(value.getQuantity(), min);
+              max = Math.max(value.getQuantity(), max);
               return Lists.newArrayList(min, max);
             }, Materialized.with(Serdes.Integer(), JsonSerde.of(new TypeReference<>() { })));
-    KStream<Integer, PercentageWrapper> globalStockPercentagePerItem = metaGlobalStockStream
+    KStream<Integer, PercentageWrapper> globalPercentagePerItem = metaGlobalStockStream
         .join(globalStockMinMax, (global, minMax) -> {
           int min = minMax.get(0), max = minMax.get(1);
           int offset = global.getQuantity() - min, maxOffset = max - min;
@@ -143,8 +140,8 @@ public class StreamProcessor {
             JsonSerde.of(GlobalStockQuantity.class),
             JsonSerde.of(new TypeReference<>() { })))
         .filter((id, percentageWrapper) -> Double.isFinite(percentageWrapper.getPercentage()));
-    globalStockPercentagePerItem
-        .to("global-stock-percentage",
+    globalPercentagePerItem
+        .to("stock-global-percentage",
             Produced.with(JsonSerde.of(Integer.class), JsonSerde.of(PercentageWrapper.class)));
 
     return builder.build();
@@ -206,6 +203,12 @@ public class StreamProcessor {
       this(quantity.getQuantity(), quantity.getLastUpdate());
     }
 
+    public QuantityWrapper add(QuantityWrapper that) {
+      var lastUpdate = that.getLastUpdate().isAfter(this.lastUpdate)
+          ? that.getLastUpdate() : this.lastUpdate;
+      return new QuantityWrapper(this.quantity + that.quantity, lastUpdate);
+    }
+
     public int getQuantity() {
       return quantity;
     }
@@ -251,6 +254,12 @@ public class StreamProcessor {
 
     public static GlobalStockQuantity zero() {
       return new GlobalStockQuantity(0, false, LocalDateTime.MIN.atZone(ZoneOffset.UTC));
+    }
+
+    public GlobalStockQuantity add(GlobalStockQuantity quantity) {
+      var lastUpdate = quantity.getLastUpdate().isAfter(this.lastUpdate)
+          ? quantity.getLastUpdate() : this.lastUpdate;
+      return new GlobalStockQuantity(this.quantity + quantity.getQuantity(), false, lastUpdate);
     }
 
     public GlobalStockQuantity add(Quantity quantity) {
