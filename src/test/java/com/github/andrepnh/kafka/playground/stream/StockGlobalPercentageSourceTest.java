@@ -4,13 +4,13 @@ import static org.junit.Assert.assertEquals;
 
 import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
 import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
-import com.github.andrepnh.kafka.playground.stream.StreamProcessor.PercentageWrapper;
+import com.github.andrepnh.kafka.playground.stream.StockGlobalPercentageSource.PercentageWrapper;
 import java.time.ZonedDateTime;
 import java.util.List;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.Test;
 
-public class StockGlobalPercentageTest extends BaseStreamTest {
+public class StockGlobalPercentageSourceTest extends BaseStreamTest {
 
   @Test
   public void shouldComputeGlobalPercentagesForMultipleStockItems() {

@@ -14,7 +14,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serdes;
 import org.junit.Test;
 
-public class WarehouseAllocationTest extends BaseStreamTest {
+public class WarehouseAllocationSourceTest extends BaseStreamTest {
 
   @Test
   public void shouldUpdateWarehouseAllocationEvenIfWarehousesAreNotChanged() {

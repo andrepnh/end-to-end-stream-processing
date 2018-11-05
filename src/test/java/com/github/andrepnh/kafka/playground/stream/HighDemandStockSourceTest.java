@@ -9,7 +9,7 @@ import java.util.List;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.Test;
 
-public class HighDemandStockTest extends BaseStreamTest {
+public class HighDemandStockSourceTest extends BaseStreamTest {
 
   @Test
   public void shouldComputeStockWithHighDemandForMultipleStockItems() {
