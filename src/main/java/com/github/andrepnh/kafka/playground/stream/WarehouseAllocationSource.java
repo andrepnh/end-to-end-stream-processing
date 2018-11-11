@@ -4,7 +4,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
+import com.github.andrepnh.kafka.playground.db.Warehouse;
 import com.google.common.base.MoreObjects;
 import java.util.Objects;
 import org.apache.kafka.common.serialization.Serdes;

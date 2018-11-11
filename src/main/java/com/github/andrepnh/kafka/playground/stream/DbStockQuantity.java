@@ -1,6 +1,6 @@
 package com.github.andrepnh.kafka.playground.stream;
 
-import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
+import com.github.andrepnh.kafka.playground.db.StockQuantity;
 import java.time.Instant;
 import java.time.ZoneOffset;
 

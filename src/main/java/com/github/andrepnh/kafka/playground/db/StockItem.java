@@ -1,4 +1,4 @@
-package com.github.andrepnh.kafka.playground.db.gen;
+package com.github.andrepnh.kafka.playground.db;
 
 import com.google.common.base.MoreObjects;
 import java.util.Objects;
@@ -11,10 +11,6 @@ public class StockItem {
   public StockItem(int id, String description) {
     this.id = id;
     this.description = description;
-  }
-
-  public static StockItem random(int idUpperBoundInclusive) {
-    return new StockItem(Generator.positive(idUpperBoundInclusive), Generator.words());
   }
 
   @Override

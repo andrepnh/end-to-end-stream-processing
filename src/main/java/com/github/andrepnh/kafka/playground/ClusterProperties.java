@@ -10,17 +10,15 @@ import org.eclipse.collections.api.list.primitive.ImmutableIntList;
 
 public final class ClusterProperties {
   public static final int BROKERS = Integer.parseInt(System.getenv("KAFKA_BROKERS"));
-  public static final ImmutableIntList KAFKA_HOST_PORTS;
-  public static final String KAFKA_HOST;
   public static final String BOOTSTRAP_SERVERS;
 
   static {
     checkState(
         !Strings.isNullOrEmpty(System.getenv("DOCKER_HOST_IP")),
         "The environment variable DOCKER_HOST_IP is mandatory");
-    KAFKA_HOST = System.getenv("DOCKER_HOST_IP");
-    KAFKA_HOST_PORTS = new PortInspector().inspect(BROKERS).toImmutable();
-    BOOTSTRAP_SERVERS = KAFKA_HOST_PORTS.collect(port -> KAFKA_HOST + ":" + port).makeString(",");
+    String kafkaHost = System.getenv("DOCKER_HOST_IP");
+    ImmutableIntList kafkaPorts = new PortInspector().inspect(BROKERS).toImmutable();
+    BOOTSTRAP_SERVERS = kafkaPorts.collect(port -> kafkaHost + ":" + port).makeString(",");
   }
 
   public static ImmutableMap.Builder<String, Object> newDefaultConsumerProperties() {

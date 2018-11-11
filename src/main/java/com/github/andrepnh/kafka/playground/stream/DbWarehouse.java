@@ -1,6 +1,6 @@
 package com.github.andrepnh.kafka.playground.stream;
 
-import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
+import com.github.andrepnh.kafka.playground.db.Warehouse;
 import com.google.common.base.MoreObjects;
 import java.time.Instant;
 import java.time.ZoneOffset;

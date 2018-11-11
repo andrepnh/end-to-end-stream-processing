@@ -3,8 +3,8 @@ package com.github.andrepnh.kafka.playground.stream;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
-import com.github.andrepnh.kafka.playground.db.gen.Warehouse;
+import com.github.andrepnh.kafka.playground.db.StockQuantity;
+import com.github.andrepnh.kafka.playground.db.Warehouse;
 import com.google.common.collect.ImmutableList;
 import org.apache.kafka.streams.KeyValue;
 

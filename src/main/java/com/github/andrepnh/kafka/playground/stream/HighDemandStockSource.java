@@ -3,7 +3,7 @@ package com.github.andrepnh.kafka.playground.stream;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
+import com.github.andrepnh.kafka.playground.db.StockQuantity;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;

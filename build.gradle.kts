@@ -32,7 +32,6 @@ dependencies {
     compile("com.google.guava:guava:25.1-jre")
     compile("org.eclipse.collections:eclipse-collections-api:9.2.0")
     compile("org.eclipse.collections:eclipse-collections:9.2.0")
-    compile("org.postgresql:postgresql:42.2.4")
     compile("org.apache.kafka:kafka-streams:2.0.0")
     compile("com.fasterxml.jackson.core:jackson-core:2.9.6")
     compile("org.slf4j:slf4j-simple:1.7.25")

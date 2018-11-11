@@ -1,20 +1,15 @@
-package com.github.andrepnh.kafka.playground.db.gen;
+package com.github.andrepnh.kafka.playground.db;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
-import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Objects;
-import org.eclipse.collections.api.tuple.Pair;
 
 public class Warehouse {
-  private static final int MAX_STORAGE_CAPACITY = 1000000;
-
   private final int id;
 
   private final String name;
@@ -41,17 +36,6 @@ public class Warehouse {
     this.storageCapacity = storageCapacity;
     // Nanosecond precision is not available
     this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC).withNano(0);
-  }
-
-  public static Warehouse random(int idUpperBoundInclusive) {
-    Pair<Float, Float> latitudeAndLongitude = Generator.randomLocation();
-    return new Warehouse(
-        Generator.positive(idUpperBoundInclusive),
-        Generator.words(),
-        Generator.positive(MAX_STORAGE_CAPACITY),
-        latitudeAndLongitude.getOne(),
-        latitudeAndLongitude.getTwo(),
-        ZonedDateTime.now());
   }
 
   @Override
