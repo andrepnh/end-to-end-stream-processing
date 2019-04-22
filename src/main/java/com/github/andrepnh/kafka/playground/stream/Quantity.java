@@ -1,6 +1,6 @@
 package com.github.andrepnh.kafka.playground.stream;
 
-import com.github.andrepnh.kafka.playground.db.gen.StockQuantity;
+import com.github.andrepnh.kafka.playground.db.StockQuantity;
 import com.google.common.base.MoreObjects;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -24,7 +24,7 @@ public class Quantity {
     return new Quantity(state.getQuantity(), state.getLastUpdate());
   }
 
-  public Quantity sum(Quantity other) {
+  public Quantity add(Quantity other) {
     return new Quantity(
         this.quantity + other.quantity,
         this.lastUpdate.isAfter(other.lastUpdate) ? this.lastUpdate : other.lastUpdate);

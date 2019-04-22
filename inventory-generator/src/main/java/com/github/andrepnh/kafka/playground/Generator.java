@@ -1,12 +1,9 @@
-package com.github.andrepnh.kafka.playground.db.gen;
+package com.github.andrepnh.kafka.playground;
 
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.DoubleSummaryStatistics;
 import java.util.List;
 import java.util.Optional;
@@ -21,20 +18,11 @@ import org.eclipse.collections.impl.factory.Lists;
 import org.eclipse.collections.impl.tuple.Tuples;
 
 public final class Generator {
-  private static final long MAX_EPOCH_OFFSET_MILLIS =
-      Instant.now().minusMillis(Instant.EPOCH.toEpochMilli()).toEpochMilli();
-
   private static final Random RNG = new Random();
 
-  public static final String LETTERS = "abcdefghijklmnopqrstuvwxyz";
+  private static final int WORD_MIN_LENGTH = 3;
 
-  public static ZonedDateTime moment() {
-    var instant = Instant.EPOCH.plusMillis(
-        RNG.longs(0, MAX_EPOCH_OFFSET_MILLIS + 1)
-            .limit(1)
-            .sum());
-    return ZonedDateTime.ofInstant(instant, ZoneOffset.UTC.normalized());
-  }
+  public static final String LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
   public static Pair<Float, Float> randomLocation() {
     return LocationGenerator.randomLocation();
@@ -63,7 +51,8 @@ public final class Generator {
   }
 
   public static String word(int maxLength) {
-    return IntStream.range(0, RNG.nextInt(maxLength) + 1)
+    int length = RNG.nextInt(maxLength + 1 - WORD_MIN_LENGTH) + WORD_MIN_LENGTH;
+    return IntStream.range(0, length)
         .mapToObj(i -> letter(i == 0))
         .collect(Collectors.joining());
   }
@@ -71,10 +60,6 @@ public final class Generator {
   public static String letter(boolean upper) {
     var letter = String.valueOf(LETTERS.charAt(RNG.nextInt(LETTERS.length())));
     return upper ? letter.toUpperCase() : letter;
-  }
-
-  public static <T> T choose(List<T> options) {
-    return options.get(RNG.nextInt(options.size()));
   }
 
   public static <T> T choose(ImmutableList<T> options) {

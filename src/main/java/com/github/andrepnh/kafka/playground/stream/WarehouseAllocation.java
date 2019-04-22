@@ -17,7 +17,6 @@ public class WarehouseAllocation {
 
   private final AllocationThreshold threshold;
 
-  @JsonProperty("@timestamp")
   private final ZonedDateTime lastUpdate;
 
   public WarehouseAllocation(String name, float latitude, float longitude, double allocation,

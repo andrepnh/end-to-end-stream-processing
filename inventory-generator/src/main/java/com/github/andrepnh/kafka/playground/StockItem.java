@@ -1,4 +1,4 @@
-package com.github.andrepnh.kafka.playground.db.gen;
+package com.github.andrepnh.kafka.playground;
 
 import com.google.common.base.MoreObjects;
 import java.util.Objects;

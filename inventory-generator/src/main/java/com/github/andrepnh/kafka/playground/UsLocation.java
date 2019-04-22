@@ -1,4 +1,4 @@
-package com.github.andrepnh.kafka.playground.db.gen;
+package com.github.andrepnh.kafka.playground;
 
 /**
  * Based on https://www.artscipub.com/info/latlonofmajorcities.asp

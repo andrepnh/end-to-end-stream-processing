@@ -1,8 +1,11 @@
-curl -X PUT http://$DOCKER_HOST_IP:9200/_template/kafka-connect-template \
+curl -X PUT http://$DOCKER_HOST_IP:9200/_template/inventory-template \
 -H "Accept: application/json" -H "Content-Type: application/json" \
 -d @- << EOF
 {
-  "index_patterns": ["warehouse-capacity", "global-stock", "global-stock-percentage"],
+  "index_patterns": [
+    "warehouse-allocation", "global-stock", "stock-global-percentage", "high-demand-stock", 
+    "warehouse_allocation", "global_stock", "stock_global_percentage", "high_demand_stock"
+  ],
   "order": 0,
   "settings": {
     "number_of_shards": 1,
@@ -15,7 +18,10 @@ curl -X PUT http://$DOCKER_HOST_IP:9200/_template/kafka-connect-template \
         "enabled": true
       },
       "properties": {
-        "@timestamp": {
+        "last_update": {
+          "type": "date"
+        },
+        "lastUpdate": {
           "type": "date"
         },
         "location": {

@@ -1,4 +1,4 @@
-package com.github.andrepnh.kafka.playground.db.gen;
+package com.github.andrepnh.kafka.playground.db;
 
 import com.google.common.base.MoreObjects;
 import java.time.ZoneOffset;
@@ -20,14 +20,6 @@ public class StockQuantity {
     this.quantity = quantity;
     // Nanosecond precision is not available
     this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC).withNano(0);
-  }
-
-  public static StockQuantity random(int warehouseId, int stockItemId) {
-    return new StockQuantity(
-        warehouseId,
-        stockItemId,
-        Generator.rangeClosed(-100, 125),
-        ZonedDateTime.now(ZoneOffset.UTC));
   }
 
   @Override

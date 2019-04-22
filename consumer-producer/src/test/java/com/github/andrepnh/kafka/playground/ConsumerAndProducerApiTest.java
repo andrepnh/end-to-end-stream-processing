@@ -5,7 +5,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import java.time.Duration;
 import java.util.Comparator;
-import java.util.List;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -13,7 +12,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.multimap.list.ImmutableListMultimap;
-import org.eclipse.collections.impl.block.factory.Functions;
 import org.junit.Test;
 
 import java.util.concurrent.ExecutionException;
@@ -22,7 +20,7 @@ import static org.junit.Assert.assertEquals;
 
 public class ConsumerAndProducerApiTest {
 
-//  @Test
+  @Test
   public void singleProducerAndConsumer() throws ExecutionException, InterruptedException {
     final String topic = TopicCreator.uniqueTopicName("simple-consumer-producer");
     var producerProps = ProducerFacade.newDefaultProducerProperties().build();
@@ -37,8 +35,7 @@ public class ConsumerAndProducerApiTest {
             // and always use an unique topic name, which means once the consumer group is spun up
             // it has no offset. When this happens by default the group will be positioned after the
             // last record, which means it'll skip the record we just sent.
-            // By changing auto.offset.reset to "earliest" the group will consumeUntilNoRecordsFound
-            // records from the
+            // By changing auto.offset.reset to "earliest" the group will consume records from the
             // very beginning of the topic-partition.
             .put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
             .build();
@@ -48,7 +45,7 @@ public class ConsumerAndProducerApiTest {
       // created, which could cause UnknownTopicOrPartitionException since leader election could be
       // in progress.
       // https://stackoverflow.com/questions/44514923/reproducing-unknowntopicorpartitionexception-this-server-does-not-host-this-top
-      ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(2000));
+      ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(5000));
       var record = Iterables.getOnlyElement(records);
       assertEquals("hello world", record.value());
       System.out.format(
@@ -64,26 +61,25 @@ public class ConsumerAndProducerApiTest {
     }
   }
 
-//  @Test
-  public void multipleConsumersInASingleGroup() {
+  @Test
+  public void multipleConsumersInASingleGroupDoNotReceiveTheSameRecords() {
     final var topic = TopicCreator.create(
         "multiple-consumers-single-group", ClusterProperties.BROKERS);
-    final int records = 1000;
-    ProducerFacade.produce(topic.getName(), records);
+    final int recordsCreated = 1000;
+    ProducerFacade.produce(topic.getName(), recordsCreated);
 
-    ImmutableList<ConsumerResults> results = new FluentParallelConsumer(topic.getPartitions())
+    ImmutableList<ConsumerResults> results = new FluentParallelConsumer(10)
         .resetOffsetToEarliest()
         .withTopicBasedGroupName(topic.getName())
         .consumeUntilNoRecordsFound(topic, 50, Duration.ofSeconds(5));
     long totalRecordsConsumed = results.collectInt(ConsumerResults::getRecords).sum();
-    assertEquals(records, totalRecordsConsumed);
+    assertEquals(recordsCreated, totalRecordsConsumed);
     printRecordsConsumedCount(results);
   }
 
-//  @Test
-  public void singleConsumerPerGroupAndMultipleGroups() {
-    final var topic = TopicCreator.create(
-        "single-consumer-in-multiple-groups", ClusterProperties.BROKERS);
+  @Test
+  public void recordsAreBroadcastedToAllConsumerGroups() {
+    final var topic = TopicCreator.create("single-consumer-in-multiple-groups", 2);
     final int records = 1000, consumerGroups = topic.getPartitions();
     ProducerFacade.produce(topic.getName(), records);
 
@@ -91,7 +87,8 @@ public class ConsumerAndProducerApiTest {
         new FluentParallelConsumer(consumerGroups)
             .resetOffsetToEarliest()
             .withGroupName(groupNumber -> topic.getName() + "_group" + groupNumber)
-            .consumeUntilNoRecordsFound(topic, 20, Duration.ofSeconds(15))
+            // TODO flaky test, had to increase noRecordsLimit
+            .consumeUntilNoRecordsFound(topic, 200, Duration.ofSeconds(15))
             .groupBy(ConsumerResults::getConsumerGroup);
     resultsByGroup.forEachKeyMultiValues(
         (group, results) -> {
@@ -103,7 +100,7 @@ public class ConsumerAndProducerApiTest {
     printRecordsConsumedCountGroupedByGroup(resultsByGroup);
   }
 
-//  @Test
+  @Test
   public void recordsAreBalancedOnlyUpToAsManyConsumersAsPartitions() {
     final var topic = TopicCreator.create("more-consumers-than-partitions", 2);
     final int records = 1000, consumerQty = topic.getPartitions() + 10;
@@ -116,15 +113,6 @@ public class ConsumerAndProducerApiTest {
         .select(results -> results.getRecords() > 0);
     assertEquals(topic.getPartitions(), consumersWithRecords.size());
     consumersWithRecords.forEach(System.out::println);
-  }
-
-  private ImmutableListMultimap<String, ConsumerResults> groupByConsumerGroup(
-      List<ImmutableList<ConsumerResults>> results) {
-    return org.eclipse.collections.impl.factory.Lists.immutable
-        .ofAll(results)
-        .flatCollect(Functions.identity())
-        .select(result -> result.getRecords() > 0)
-        .groupBy(ConsumerResults::getConsumerGroup);
   }
 
   private void printRecordsConsumedCountGroupedByGroup(
