@@ -47,6 +47,7 @@ public class Main {
     };
 
     final var millisecondsSleep = new AtomicInteger(100);
+    printUsageInfo(millisecondsSleep.get());
     final var insertions = new AtomicInteger(0);
     var pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
     pool.submit(() -> {
@@ -63,7 +64,7 @@ public class Main {
             insert(item, dbConnectionSupplier);
             insert(stock, dbConnectionSupplier);
             if (insertions.incrementAndGet() % 100 == 0) {
-              System.out.println(LocalTime.now() + " - 100 records inserted");
+              System.out.format("%s - 100 records inserted; sleep time: %d\n", LocalTime.now(), millisecondsSleep.get());
             }
             try {
               TimeUnit.MILLISECONDS.sleep(millisecondsSleep.get());
@@ -77,12 +78,20 @@ public class Main {
       while ((line = reader.readLine()) != null) {
         line = line.trim();
         int sleep = Integer.parseInt(line);
-        if (sleep == -1) {
+        if (sleep < 0) {
           System.exit(0);
         }
         millisecondsSleep.set(sleep);
       }
     }
+  }
+
+  private static void printUsageInfo(int sleepInterval) {
+    System.out.println("#############################################################################################");
+    System.out.format("> Inserting data using multiple threads; will sleep for %d ms after each insertion\n",
+        sleepInterval);
+    System.out.println("> At any point you can enter a number to override the wait time or a negative number to exit.");
+    System.out.println("#############################################################################################");
   }
 
   private static Supplier<Connection> createDbConnectionSupplier() {
