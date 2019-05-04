@@ -4,15 +4,20 @@ To execute, first ensure the postgres service is up:
 ```bash
 $ cd ../testbed
 $ export DOCKER_HOST_IP=ip
-$ docker-compose up
+$ docker-compose up postgres
 ```
 
-A note about `DOCKER_HOST_IP`, as mentioned in [wurstmeister/kafka-docker](https://github.com/wurstmeister/kafka-docker) one cannot assign it to `localhost` or `127.0.0.1`, but you can use the ip you got from any network you're connected to.
-
-After the services are up, on another terminal do:
+After the service is up, on another terminal do:
 
 ```bash
-$ ./gradlew clean build && java -jar build/libs/inventory-generator-1.0-SNAPSHOT-all.jar
+$ ./gradlew run
 ```
 
-The application will print usage info and immediately start inserting data.
+Data generation can be configured by passing the following properties with `-D`:
+
+1. `max.warehouses`:, the maximum amount of warehouses, defaults to 300.
+2. `max.items`: the maximum mount of products, defaults to 500.
+3. `milliseconds.sleep`: the amount of time each thread will sleep after generating a stock entry, defaults to 400.
+4. `stock.to.generate`: stocks to create, the application will finish once this number is reached. Default is 100000.
+
+Warehouses and items are created as needed and the first two properties only dictates the maximum available. Due to randomness the actual amount could be lower.
