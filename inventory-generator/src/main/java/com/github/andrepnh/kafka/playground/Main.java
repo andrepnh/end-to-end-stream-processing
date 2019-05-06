@@ -72,7 +72,7 @@ public class Main {
     var connectionString =
         getProperty(
             "db.connections.string",
-            String.format("jdbc:postgresql://%s/connect_test", System.getenv("DOCKER_HOST_IP")),
+            "jdbc:postgresql://postgres/connect_test",
             Function.identity());
     var user = getProperty("db.user", "postgres", Function.identity());
     var password = getProperty("db.password", "postgres", Function.identity());
