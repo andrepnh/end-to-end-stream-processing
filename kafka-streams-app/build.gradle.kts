@@ -4,7 +4,7 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 plugins {
     java
     application
-    id("com.github.johnrengelman.shadow") version("2.0.4")
+    id("com.github.johnrengelman.shadow") version("5.0.0")
 }
 
 group = "com.github.andrepnh"
@@ -44,7 +44,7 @@ dependencies {
 }
 
 configure<JavaPluginConvention> {
-    sourceCompatibility = JavaVersion.VERSION_1_10
+    sourceCompatibility = JavaVersion.VERSION_11
 }
 
 configure<ApplicationPluginConvention> {
