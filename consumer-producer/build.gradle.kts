@@ -42,7 +42,7 @@ dockerCompose {
     require(!dockerHostIp.isNullOrBlank()) {"Please set environment variable DOCKER_HOST_IP; got $dockerHostIp"}
     println("Using $dockerHostIp as KAFKA_ADVERTISED_HOST_NAME")
     captureContainersOutput = false
-    dockerComposeWorkingDirectory = "../testbed"
+    dockerComposeWorkingDirectory = "../"
     environment["KAFKA_ADVERTISED_HOST_NAME"] = dockerHostIp
     useComposeFiles = listOf("docker-compose-kafka-simple.yml")
 //    scale = mapOf("KAFKA" to 3)

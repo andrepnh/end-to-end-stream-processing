@@ -45,7 +45,7 @@ public class ConsumerAndProducerApiTest {
       // created, which could cause UnknownTopicOrPartitionException since leader election could be
       // in progress.
       // https://stackoverflow.com/questions/44514923/reproducing-unknowntopicorpartitionexception-this-server-does-not-host-this-top
-      ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(5000));
+      ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(10000));
       var record = Iterables.getOnlyElement(records);
       assertEquals("hello world", record.value());
       System.out.format(
