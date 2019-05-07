@@ -4,16 +4,16 @@ To execute, first ensure the postgres service is up:
 ```bash
 $ cd ../testbed
 $ export DOCKER_HOST_IP=ip
-$ docker-compose up postgres
+$ docker-compose up -d postgres
 ```
 
-After the service is up, on another terminal do:
+After the service is up, do:
 
 ```bash
-$ ./gradlew run
+$ docker-compose up generator
 ```
 
-Data generation can be configured by passing the following properties with `-D`:
+Data generation can be configured with the following system properties:
 
 1. `max.warehouses`:, the maximum amount of warehouses, defaults to 300.
 2. `max.items`: the maximum mount of products, defaults to 500.

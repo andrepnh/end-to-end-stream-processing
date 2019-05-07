@@ -58,7 +58,7 @@ public class GlobalStockUpdatesSource {
 
     // For whatever reason the parameter names module did not work here
     public QuantityWrapper(@JsonProperty("quantity") int quantity,
-        @JsonProperty("@timestamp") ZonedDateTime lastUpdate) {
+        @JsonProperty("lastUpdate") ZonedDateTime lastUpdate) {
       this.quantity = quantity;
       this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC);
     }

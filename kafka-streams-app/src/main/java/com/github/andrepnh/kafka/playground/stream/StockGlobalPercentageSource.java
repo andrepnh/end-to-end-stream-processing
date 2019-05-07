@@ -66,7 +66,7 @@ public class StockGlobalPercentageSource {
 
     // For whatever reason the parameter names module did not work here
     public PercentageWrapper(@JsonProperty("percentage") double percentage,
-        @JsonProperty("@timestamp") ZonedDateTime lastUpdate) {
+        @JsonProperty("lastUpdate") ZonedDateTime lastUpdate) {
       this.percentage = percentage;
       this.lastUpdate = lastUpdate.withZoneSameInstant(ZoneOffset.UTC);
     }
