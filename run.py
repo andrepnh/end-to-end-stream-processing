@@ -70,7 +70,10 @@ def create_es_index_template():
     url = ('http://{}:9200/_template/inventory-template'
            .format(os.environ['DOCKER_HOST_IP']))
     body = read('./elasticsearch/index-templates.json')
-    send(url, body, method='PUT')
+    resp = send(url, body, method='PUT')
+    require(200 <= resp.code < 300,
+            'Unexpected response when creating es index templates: {}'
+            .format(resp.code))
 
 def create_connectors():
     url = 'http://{}:8083/connectors'.format(os.environ['DOCKER_HOST_IP'])

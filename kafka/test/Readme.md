@@ -8,8 +8,7 @@ To execute
 
 ```
 cd test
-docker-compose up -d zookeeper
-docker-compose scale kafka=2
+docker-compose up -d zookeeper kafka_1 kafka_2
 ./runAllTests.sh
 ```
 
@@ -18,15 +17,11 @@ Run selected tests
 
 ### Kafka
 
-These tests can be run without Zookeeper or Kafka running.
-
 ```
 docker-compose run --rm kafkatest <testname pattern>
 ```
 
-### Kafkacat
-
-These tests require zookeeper and kafka to be running
+### Kafkacat
 
 ```
 BROKER_LIST=$(./internal-broker-list.sh) [KAFKA_VERSION=<version>] docker-compose run --rm kafkacattest <testname pattern>
